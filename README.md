@@ -9,7 +9,7 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 | --- | --- |
 | `MONGODB_URI`, `GAPWISE_SECRET`, `ADMIN_PASSWORD` | Server environment variables (Vercel project settings / local `.env`) |
 | Claude Code OAuth token | Entered in **Settings**, stored in MongoDB encrypted with AES-256-GCM. Never set as an env var. |
-| Graph8 API key | Entered in **Settings**, stored in MongoDB encrypted with AES-256-GCM |
+| Graph8 API key | `G8_API_KEY` env var, or entered in **Settings** (stored AES-256-GCM encrypted in MongoDB; takes priority over the env var) |
 
 - Settings is write-only: the browser sends a key once and the API only ever returns whether it is set.
   Keys never appear in page HTML, API responses, JS-readable cookies, or logs.
@@ -36,9 +36,10 @@ Deployed MVPs are served at `http://localhost:5173/<business-name>`.
 1. Create a MongoDB Atlas cluster and, under **Network Access**, allow `0.0.0.0/0`
    (Vercel functions have no fixed IPs). Copy the connection string.
 2. On vercel.com: **Add New → Project → Import** this GitHub repo. The framework is detected from `vercel.json`.
-3. Under **Settings → Environment Variables**, add `MONGODB_URI`, `GAPWISE_SECRET`, `ADMIN_PASSWORD`
-   (and optionally `MONGODB_DB`). Do not add the Claude token or Graph8 key here.
-4. Deploy, open the site, sign in, and add the Graph8 key and Claude token in **Settings**.
+3. Under **Settings → Environment Variables**, add `MONGODB_URI`, `GAPWISE_SECRET`, `ADMIN_PASSWORD`,
+   `G8_API_KEY` (and optionally `MONGODB_DB`). Do not add the Claude token here.
+   If the MongoDB password contains special characters (`@ : / ? # %`), URL-encode them (`@` → `%40`).
+4. Deploy, open the site, sign in, and add the Claude token in **Settings**.
 
 Every `git push` to the production branch redeploys automatically.
 
