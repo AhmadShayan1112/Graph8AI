@@ -84,7 +84,8 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   const [page, setPage] = useState(initial.route?.page ?? 'dashboard')
   const [leads, setLeads] = useState<Lead[]>(initial.saved.leads ?? [])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(initial.saved.selectedLead ?? null)
-  const [mvpType, setMvpType] = useState(initial.saved.mvpType ?? 'booking-page')
+  // A solution suggested by gap analysis, or '' to let the MVP agents decide.
+  const [mvpType, setMvpType] = useState(initial.saved.mvpType ?? '')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [siteUrl, setSiteUrl] = useState<string | undefined>(initial.saved.siteUrl)
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
@@ -330,14 +331,17 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
               // Keep the enrichment in the campaign so the lookups aren't paid for twice.
               if (activeCampaign) saveCampaignLead(activeCampaign.id, enriched).catch(() => {})
             }}
-            onBuild={handleBuild}
+            // The audit's own score isn't a solution choice; the agents decide from the gap analysis.
+            onBuild={() => handleBuild('')}
             onBack={() => setPage('discover')}
           />
         )}
         {page === 'build' && selectedLead && (
           <BuildPage
+            key={selectedLead.id}
             lead={selectedLead}
             mvpType={mvpType}
+            campaignId={activeCampaign?.id}
             onOutreach={handleOutreach}
             onBack={() => setPage('audit')}
             onOpenSettings={isAdmin ? () => setPage('settings') : undefined}

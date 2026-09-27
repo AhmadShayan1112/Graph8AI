@@ -83,9 +83,19 @@ analysis). "Choose another lead" returns to that list. Build & deploy and Outrea
 **Export PDF** on Audit (and on analysed leads in Gap analysis) opens a print-ready report; choose Save as PDF.
 
 ## Build & deploy  [#/build]  (needs Claude access)
-Pick an MVP type (Online booking page, Lead capture form, Mobile-first landing, Fast landing page) and press
-"Generate MVP". Claude builds a real page for that business in 1-3 minutes; preview it, then "Deploy" to publish
-it at <your site>/<business-name>. Then continue to Outreach.
+Four agents build the MVP, with live progress for each:
+1. Researcher: researches the business on the web (services, hours, team, what customers praise or complain
+   about, brand colours) and finds how the best sites in its industry deliver this kind of solution (skipped
+   without Gap analysis access; the plan then uses Graph8 data).
+2. Strategist: picks the one solution that fixes the lead's top gap from its gap analysis and designs the user
+   flow screen by screen. Everything is a web product; an app need becomes a mobile-first web app.
+3. Designer: palette, fonts, mood, industry animations (e.g. a toothbrush and sparkling tooth for a dentist) and
+   real photos from Gapwise's library (e.g. a doctor for a clinic).
+4. Builder: Claude Code writes the site in its own workspace, reviews it against the plan and fixes it.
+Choose a solution or keep "Let Gapwise decide" (the default; gap analysis's recommendation is marked), then
+press **Plan & build MVP** (about 3-6 minutes). **Rebuild with this plan** reruns only the builder. Preview it,
+**Deploy** to publish at <your site>/<business-name>, then **Write outreach**. Opening Build from Gap analysis
+uses that lead's analysis, so run gap analysis first for the best result.
 
 ## Outreach  [#/outreach]
 Generates an outreach email that links to the deployed MVP, plus a follow-up sequence (day 0 email, day 3

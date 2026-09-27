@@ -111,7 +111,7 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId, o
             {exporting ? 'Preparing PDF…' : 'Export PDF'}
           </button>
           <button className="btn-accent" onClick={() => onBuild(analysis.biggestGap.mvpType)}>
-            Build MVP for this gap →
+            Plan &amp; build MVP →
           </button>
         </div>
       </header>
@@ -180,7 +180,7 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId, o
             <div className="biggest-gap-desc">{analysis.biggestGap.description}</div>
             <div className="biggest-gap-rec">{analysis.biggestGap.recommendation}</div>
             <button className="btn-light" onClick={() => onBuild(analysis.biggestGap.mvpType)}>
-              Build {analysis.biggestGap.mvpType.replace(/-/g, ' ')} MVP
+              Plan &amp; build an MVP
             </button>
           </div>
           <div className="context-card">

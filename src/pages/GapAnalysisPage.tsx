@@ -10,6 +10,7 @@ import {
 import { useSession } from '../components/LoginGate'
 import { buildLeadReport, openReportWindow, showReport } from '../lib/report'
 import { confirmDialog } from '../components/Dialog'
+import { OFFER_LABEL } from '../lib/offers'
 
 interface Props {
   campaignId: string | null
@@ -19,12 +20,6 @@ interface Props {
   onNewCampaign: () => void
 }
 
-const OFFER_LABEL: Record<string, string> = {
-  'booking-page': 'Online booking page',
-  'contact-form': 'Lead capture form',
-  'mobile-landing': 'Mobile-first landing page',
-  'speed-landing': 'Fast landing page',
-}
 const LEVEL_LABEL: Record<GapLevel, string> = { high: 'High', medium: 'Medium', low: 'Low' }
 
 const STEPS: Array<{ key: GapStage; label: string }> = [

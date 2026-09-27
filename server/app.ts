@@ -19,7 +19,8 @@ import {
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
 import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
 import { deleteSecret, getGeminiModel, getWorkspaceAccess, secretStatus, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
-import { generateSiteHtml, publicClaudeError } from './claude.js'
+import { publicClaudeError } from './claude.js'
+import { SOLUTION_TYPES, buildMvp, imagesFor, loadPlan, planMvp, researchLead, savePlan } from './mvpAgents.js'
 import { getDb } from './db.js'
 import {
   createUser, deleteUser, listUsers, normalizeUsername, parsePermissions, updateUser, validatePassword, validateUsername,
@@ -960,38 +961,7 @@ app.get('/api/leads/:id/intent', needsGraph8, async (req, res) => {
   }
 })
 
-// Generate an MVP site for a lead with Claude, kept as a draft until it is deployed.
-const MVP_TYPES: Record<string, { title: string; tag: string; description: string; fixes: string; steps: string[] }> = {
-  'booking-page': {
-    title: 'Online Booking Page',
-    tag: 'recommended',
-    description: 'Branded booking page with their services, hours, contact info and a booking flow.',
-    fixes: 'No online booking, Phone-only appointments',
-    steps: ['Reading business data', 'Planning services and hours', 'Designing the booking flow', 'Writing the page', 'Checking mobile layout'],
-  },
-  'contact-form': {
-    title: 'Lead Capture Form',
-    tag: 'quick win',
-    description: 'Landing page built around a smart contact form with service selection.',
-    fixes: 'No contact form, Missing lead capture',
-    steps: ['Reading business data', 'Choosing form fields', 'Adding service options', 'Writing the page', 'Checking mobile layout'],
-  },
-  'mobile-landing': {
-    title: 'Mobile-First Landing',
-    tag: 'high impact',
-    description: 'Responsive landing page optimized for mobile visitors, with click-to-call.',
-    fixes: 'Not mobile-friendly, Poor mobile experience',
-    steps: ['Reading business data', 'Extracting key content', 'Designing mobile layout', 'Writing the page', 'Adding click-to-call'],
-  },
-  'speed-landing': {
-    title: 'Fast Landing Page',
-    tag: 'performance',
-    description: 'Lightweight landing page with minimal assets that loads in under a second.',
-    fixes: 'Slow website, Poor Core Web Vitals',
-    steps: ['Reading business data', 'Planning a lightweight layout', 'Inlining critical styles', 'Writing the page', 'Trimming page weight'],
-  },
-}
-
+// MVPs are kept as drafts until deployed.
 interface DraftDoc { html: string; leadId: string; leadName: string; mvpType: string; createdAt: Date }
 interface SiteDoc { _id: string; html: string; leadId: string; leadName: string; mvpType: string; createdAt: Date; updatedAt: Date }
 
@@ -1006,31 +976,107 @@ async function drafts() {
 }
 const sites = async () => (await getDb()).collection<SiteDoc>('sites')
 
-app.post('/api/mvp/generate', async (req, res) => {
-  const { lead, mvpType } = req.body ?? {}
-  if (!lead?.name) { res.status(400).json({ error: 'lead required' }); return }
-  const meta = MVP_TYPES[mvpType] ?? MVP_TYPES['booking-page']
+// Streams newline-delimited JSON events to the browser; a heartbeat keeps long steps visibly alive.
+function openStream(res: Response) {
+  res.status(200)
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+  const send = (event: Record<string, unknown>) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(event)}\n`) }
+  const heartbeat = setInterval(() => send({ type: 'tick' }), 5000)
+  return { send, end: () => { clearInterval(heartbeat); res.end() } }
+}
+
+function mvpError(err: unknown, admin: boolean) {
+  if (err instanceof GeminiError) return err.message + (admin && err.detail ? ` Details: ${err.detail}` : '')
+  return publicClaudeError(err).error
+}
+
+// Step 1 of an MVP: the researcher, strategist and designer agents produce a plan (saved for the build step).
+app.post('/api/mvp/plan', async (req, res) => {
+  const auth = getAuth(res)
+  const lead = req.body?.lead
+  if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
+  const preference = typeof req.body?.preference === 'string' ? req.body.preference : undefined
+  // The lead's gap analysis, when it was opened from a campaign that has one.
+  let gap: Record<string, any> | null = null
+  if (typeof req.body?.campaignId === 'string') {
+    const cid = await campaignIdFor(auth, req.body.campaignId).catch(() => null)
+    if (cid) gap = (await listGapAnalyses(cid).catch(() => [])).find(g => g.leadId === String(lead.id))?.result ?? null
+  }
+  const { industry, images } = imagesFor(String(lead.type ?? ''), `${lead.name} ${lead.enrichment?.company?.description ?? ''}`)
+  const stream = openStream(res)
   try {
-    const html = await generateSiteHtml({
-      name: lead.name,
-      type: lead.type,
-      city: lead.city,
-      site: lead.site,
-      gaps: lead.gaps,
-      mvpTitle: meta.title,
-      mvpDescription: meta.description,
-      phone: lead.enrichment?.company?.phone || lead.enrichment?.person?.phone,
-      address: lead.enrichment?.company?.address,
-      description: lead.enrichment?.company?.description,
+    let research: Record<string, any> | null = null
+    let researchNote = ''
+    stream.send({ type: 'stage', stage: 'research' })
+    if (!auth.permissions.gemini) {
+      researchNote = 'Web research skipped: gap analysis is turned off for this account, so the plan uses Graph8 data only.'
+    } else {
+      try {
+        const r = await researchLead(lead, gap)
+        research = { ...r.research, sources: r.sources }
+      } catch (err) {
+        researchNote = `Web research was not available (${err instanceof GeminiError ? err.message : 'error'}), so the plan uses Graph8 data only.`
+      }
+    }
+    stream.send({ type: 'research', research, note: researchNote, usedGapAnalysis: !!gap })
+
+    stream.send({ type: 'stage', stage: 'strategy' })
+    const plan = await planMvp(lead, gap, research, images, preference)
+    stream.send({ type: 'stage', stage: 'design' })
+    const saved = await savePlan(auth, {
+      leadId: String(lead.id ?? lead.name), leadName: String(lead.name), lead, research, researchNote, plan, images, industry,
     })
-    const { insertedId } = await (await drafts()).insertOne({
-      html, leadId: String(lead.id ?? lead.name), leadName: lead.name, mvpType, createdAt: new Date(),
-    })
-    res.json({ mvp: { ...meta, html, draftId: String(insertedId) }, lead })
+    stream.send({ type: 'done', planId: String(saved._id), plan, research, researchNote, images, industry, usedGapAnalysis: !!gap })
   } catch (err) {
-    console.error('[mvp] generate failed:', err instanceof Error ? err.message : err)
-    const { status, error } = publicClaudeError(err)
-    res.status(status).json({ error })
+    console.error('[mvp] plan failed:', err instanceof Error ? err.message : err)
+    stream.send({ type: 'error', error: mvpError(err, auth.role === 'admin') })
+  } finally {
+    stream.end()
+  }
+})
+
+// Step 2: the builder agent writes the site from the saved plan; progress is the amount written so far.
+app.post('/api/mvp/generate', async (req, res) => {
+  const auth = getAuth(res)
+  const doc = await loadPlan(auth, String(req.body?.planId ?? '')).catch(() => null)
+  if (!doc) { res.status(404).json({ error: 'That plan has expired. Plan the MVP again.' }); return }
+  const stream = openStream(res)
+  try {
+    stream.send({ type: 'stage', stage: 'build' })
+    let last = 0
+    let lastAction = ''
+    const html = await buildMvp(doc, ({ action, chars }) => {
+      if (action !== lastAction || chars - last >= 800) {
+        last = chars
+        lastAction = action
+        stream.send({ type: 'progress', chars, action })
+      }
+    })
+    const type = String(doc.plan?.solution?.type ?? 'booking-page')
+    const { insertedId } = await (await drafts()).insertOne({
+      html, leadId: doc.leadId, leadName: doc.leadName, mvpType: type, createdAt: new Date(),
+    })
+    const meta = SOLUTION_TYPES[type] ?? SOLUTION_TYPES['booking-page']
+    stream.send({
+      type: 'done',
+      mvp: {
+        title: String(doc.plan?.solution?.title || meta.title),
+        tag: meta.title,
+        description: String(doc.plan?.solution?.promise || meta.description),
+        fixes: (doc.plan?.solution?.fixesGaps ?? []).join(', '),
+        steps: (doc.plan?.flow ?? []).map((f: any) => String(f.screen ?? '')).filter(Boolean),
+        html,
+        draftId: String(insertedId),
+        solutionType: type,
+      },
+    })
+  } catch (err) {
+    console.error('[mvp] build failed:', err instanceof Error ? err.message : err)
+    stream.send({ type: 'error', error: mvpError(err, auth.role === 'admin') })
+  } finally {
+    stream.end()
   }
 })
 

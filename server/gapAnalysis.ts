@@ -6,7 +6,12 @@ import { askGeminiWithSearch, extractJson } from './gemini.js'
 
 // Gap analysis of one lead: Graph8's record of the business plus Gemini researching it on the web.
 // Produces real gaps with evidence, the solutions the business is likely looking for, and a prospect profile.
-export const OFFERS = ['booking-page', 'contact-form', 'mobile-landing', 'speed-landing'] as const
+// The web solutions Gapwise can build (same ids as SOLUTION_TYPES in mvpAgents.ts). Gap analysis must recommend
+// one of these, so the MVP that follows is a real answer to the gap, never something we cannot deliver.
+export const OFFERS = [
+  'booking-page', 'ordering-page', 'contact-form', 'quote-calculator', 'mobile-landing',
+  'speed-landing', 'reviews-page', 'faq-assistant', 'web-app',
+] as const
 type Offer = (typeof OFFERS)[number]
 type Level = 'high' | 'medium' | 'low'
 
@@ -104,7 +109,10 @@ function buildPrompt(lead: Record<string, any>, company: Record<string, any> | n
     linkedin: company?.linkedin || undefined,
     facebook: company?.facebook || undefined,
   }
-  return `You are a sales researcher for an agency that builds websites, online booking pages, lead-capture forms and fast mobile landing pages for local businesses.
+  return `You are a sales researcher for an agency that wins local-business clients by building them a working web solution before the first call.
+We only build web products: online booking, online menu & ordering, lead capture forms, instant quote calculators, mobile-first
+landing pages, fast landing pages, reviews & trust pages, FAQ & enquiry assistants, and mobile-first web apps. Never recommend
+a native mobile app: if the business needs app-like features, recommend a mobile-first web app of that exact feature.
 
 Research this business on the web now. Use Google Search: look for its website (if any), Google Business Profile / Maps listing, reviews, social pages and directory listings. Base every claim on what you actually find; if you cannot find something, say so rather than guessing.
 
@@ -130,7 +138,7 @@ Reply with ONLY a JSON object, no prose before or after, in exactly this shape:
   "needs": [{ "solution": "what they need", "why": "reason, tied to evidence", "priority": "high|medium|low" }],
   "prospect": {
     "fitScore": 0-100 (how likely they are to buy one of our offers),
-    "recommendedOffer": one of "booking-page" | "contact-form" | "mobile-landing" | "speed-landing",
+    "recommendedOffer": one of "booking-page" | "ordering-page" | "contact-form" | "quote-calculator" | "mobile-landing" | "speed-landing" | "reviews-page" | "faq-assistant" | "web-app" (the one that fixes the most important gap),
     "offerReason": "why this offer first",
     "pitch": "one or two sentences we can say to them",
     "talkingPoints": ["3-5 specific points drawn from the evidence"],

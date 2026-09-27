@@ -1,17 +1,12 @@
 import type { Lead } from '../types/lead'
 import type { GapAnalysis } from './api'
+import { OFFER_LABEL } from './offers'
 
 // Lead reports as PDF: a print-ready A4 page opened in its own tab, where the browser's print dialog offers
 // "Save as PDF". No PDF library needed, text stays selectable, and it works the same on phones and desktops.
 
 export interface ReportFinding { title: string; cat: string; detail?: string; impact?: string }
 
-const OFFER_LABEL: Record<string, string> = {
-  'booking-page': 'Online booking page',
-  'contact-form': 'Lead capture form',
-  'mobile-landing': 'Mobile-first landing page',
-  'speed-landing': 'Fast landing page',
-}
 
 const esc = (v: unknown) => String(v ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')

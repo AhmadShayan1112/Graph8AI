@@ -2696,6 +2696,46 @@ body {
 @media (max-width: 1024px) { .opp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .opp-hero { flex-direction: column; align-items: flex-start; } }
 
+/* ─── MVP agents (build page) ─── */
+.mvp-choices { display: flex; flex-direction: column; gap: 6px; }
+.mvp-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; text-align: left;
+  border: 1px solid #E4E4E0; border-radius: 10px; background: #fff; font: inherit; color: inherit; cursor: pointer;
+}
+.mvp-choice strong { font-size: 13.5px; font-weight: 600; }
+.mvp-choice span { font-size: 12px; color: #6B7080; }
+.mvp-choice:hover:not(:disabled) { border-color: #C5C5C0; }
+.mvp-choice.active { border-color: #2C5DBD; background: #F5F7FE; box-shadow: 0 0 0 1px #2C5DBD inset; }
+.mvp-choice:disabled { opacity: 0.6; cursor: default; }
+.mvp-choice-tag { display: inline-block; font-size: 11px !important; font-weight: 500; color: #1B7A4E !important; background: #E3F5EC; padding: 1px 8px; border-radius: 99px; }
+.agents { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.agent { padding: 12px 14px; background: #fff; border: 1px solid #E7E7E3; border-radius: 12px; transition: border-color 0.2s; }
+.agent.active { border-color: #2C5DBD; box-shadow: 0 6px 20px -12px rgba(44, 93, 189, 0.45); }
+.agent.done { border-color: #CFE9DB; }
+.agent-head { display: flex; align-items: center; gap: 10px; }
+.agent-mark { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: #EFEFEA; color: #8A8E97; }
+.agent.active .agent-mark { background: #2C5DBD; box-shadow: 0 0 0 4px rgba(44, 93, 189, 0.15); animation: pulse 1.4s infinite; }
+.agent.done .agent-mark { background: #22A06B; color: #fff; }
+.agent-name { font-weight: 600; font-size: 14px; }
+.agent-state { margin-left: auto; font-size: 12px; color: #6B7080; font-variant-numeric: tabular-nums; }
+.agent.active .agent-state { color: #2C5DBD; font-weight: 500; }
+.agent-job { font-size: 12.5px; color: #8A8E97; margin: 2px 0 0 32px; }
+.agent-out { margin: 10px 0 0 32px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.5; color: #3C4049; }
+.agent-out p { margin: 0; }
+.agent-out ul, .agent-out ol { margin: 0; padding-left: 18px; }
+.agent-out a { color: #2C5DBD; }
+.agent-note { color: #6B7080; font-size: 12.5px; }
+.agent-solution { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.agent-flow li { margin: 2px 0; }
+.agent-palette { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #5E636E; }
+.swatch i { width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(0, 0, 0, 0.08); }
+.agent-photos { display: flex; gap: 6px; flex-wrap: wrap; }
+.agent-photos img { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; }
+.fixes-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; margin: 12px 0; }
+@media (max-width: 600px) { .agent-job, .agent-out { margin-left: 0; } }
+@media (prefers-reduced-motion: reduce) { .agent.active .agent-mark { animation: none; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {

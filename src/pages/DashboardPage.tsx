@@ -1,6 +1,7 @@
 import { useEffect, useState, type FC } from 'react'
 import { getDashboard, type Dashboard, type LeadTemperature, type Temp } from '../lib/api'
 import { useSession } from '../components/LoginGate'
+import { OFFER_LABEL } from '../lib/offers'
 
 interface Props {
   onNavigate: (page: string) => void
@@ -9,12 +10,6 @@ interface Props {
   onOpenSearch: (searchId: string) => void
 }
 
-const OFFER_LABEL: Record<string, string> = {
-  'booking-page': 'Booking page',
-  'contact-form': 'Lead capture form',
-  'mobile-landing': 'Mobile landing page',
-  'speed-landing': 'Fast landing page',
-}
 
 function ago(iso: string) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)

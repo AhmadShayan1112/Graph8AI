@@ -112,12 +112,73 @@ export async function auditWebsite(domain: string) {
   )
 }
 
-export async function generateMvp(lead: Lead, mvpType: string): Promise<{ mvp: MvpData; lead: Lead }> {
-  return apiFetch('/mvp/generate', {
-    method: 'POST',
-    body: JSON.stringify({ lead, mvpType }),
+// Reads a newline-delimited JSON stream from the server, passing each event to `onEvent`, and returns the
+// final `done` event (or throws the `error` one).
+async function readStream<T>(path: string, body: unknown, onEvent: (e: any) => void): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => null)
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    throw new ApiError(data?.error || `API error: ${res.status}`, res.status)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim()
+      buffer = buffer.slice(nl + 1)
+      if (!line) continue
+      const event = JSON.parse(line)
+      if (event.type === 'done') return event as T
+      if (event.type === 'error') throw new ApiError(event.error, event.status ?? 502)
+      onEvent(event)
+    }
+    if (done) break
+  }
+  throw new ApiError('The connection closed before the step finished. Try again.', 502)
 }
+
+export type MvpAgent = 'research' | 'strategy' | 'design' | 'build'
+
+// What the researcher, strategist and designer agents produced; the builder turns it into the site.
+export interface MvpPlanResult {
+  planId: string
+  industry: string
+  usedGapAnalysis: boolean
+  researchNote: string
+  research: Record<string, any> | null
+  images: Array<{ id: string; src: string; alt: string; kind: string }>
+  plan: {
+    solution: { type: string; title: string; promise: string; whyItWillClick: string; fixesGaps: string[] }
+    flow: Array<{ step: number; screen: string; userAction: string; systemResponse: string }>
+    sections: Array<{ id: string; name: string; purpose: string; content: string }>
+    interactions: Array<{ name: string; behaviour: string }>
+    cta: { primary: string; secondary: string }
+    copy: { headline: string; subheadline: string; tone: string }
+    design: {
+      mood: string
+      palette: Record<string, string>
+      fonts: { heading: string; body: string }
+      motifs: string[]
+      animations: Array<{ name: string; where: string; how: string }>
+      imagery: Array<{ imageId: string; where: string }>
+    }
+  }
+}
+
+// Step 1: research, strategy and design. `preference` is a solution type, or '' to let the agents decide.
+export const planMvp = (lead: Lead, campaignId: string | undefined, preference: string, onEvent: (e: any) => void) =>
+  readStream<MvpPlanResult>('/mvp/plan', { lead, campaignId, preference: preference || undefined }, onEvent)
+
+// Step 2: the builder writes the site from a saved plan; progress events carry the characters written.
+export const buildMvp = (planId: string, onEvent: (e: any) => void) =>
+  readStream<{ mvp: MvpData & { solutionType: string } }>('/mvp/generate', { planId }, onEvent)
 
 export async function generateOutreach(
   lead: Lead,
