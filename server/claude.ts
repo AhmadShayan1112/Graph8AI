@@ -155,12 +155,15 @@ export async function runClaudeAgent(opts: {
   maxTurns?: number
   deadlineMs?: number
   onActivity?: (a: AgentActivity) => void
+  // Files to place in the workspace before the agent starts (e.g. the app built so far).
+  seed?: Record<string, string>
 }) {
   const token = await getClaudeToken()
   if (!token) throw new ClaudeNotConfiguredError('Add your Claude token in Settings to generate MVPs.')
   const { env } = await claudeEnv(token)
   const workdir = path.join(tmpdir(), 'gapwise-build', randomUUID())
   await mkdir(workdir, { recursive: true })
+  for (const [name, content] of Object.entries(opts.seed ?? {})) await writeFile(path.join(workdir, name), content)
 
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), opts.deadlineMs ?? 270_000)
@@ -193,7 +196,7 @@ export async function runClaudeAgent(opts: {
         const d = m.event?.delta
         if (m.event?.type === 'content_block_start' && m.event.content_block?.type === 'tool_use') {
           const tool = String(m.event.content_block.name)
-          action = tool === 'Write' ? `Writing ${opts.file}` : tool === 'Read' ? 'Reviewing the site' : tool === 'Edit' ? 'Fixing details' : tool
+          action = tool === 'Write' ? `Writing ${opts.file}` : tool === 'Read' ? 'Reading the app' : tool === 'Edit' ? 'Editing the app' : tool
           report()
         }
         if (d?.type === 'input_json_delta' || d?.type === 'text_delta') {

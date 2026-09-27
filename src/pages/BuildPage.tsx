@@ -23,7 +23,7 @@ const AGENTS: Array<{ key: MvpAgent; name: string; job: string }> = [
   { key: 'research', name: 'Researcher', job: 'Researches the business on the web and finds how the best sites in its industry do this' },
   { key: 'strategy', name: 'Strategist', job: 'Picks the solution that fixes the top gap and designs the user flow' },
   { key: 'design', name: 'Designer', job: 'Sets colours, type, mood, industry animations and photos' },
-  { key: 'build', name: 'Builder', job: 'Claude Code builds the site in its own workspace, reviews it against the plan and fixes it' },
+  { key: 'build', name: 'Builder', job: 'Claude Code builds the app module by module in its own workspace, checking each one' },
 ]
 type Status = 'waiting' | 'active' | 'done' | 'skipped'
 
@@ -124,7 +124,11 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
     }
   }
 
-  const buildPct = status.build === 'done' ? 100 : Math.min(95, Math.round((chars / EXPECTED_CHARS) * 100))
+  // Whole app: modules finished plus progress on the one being built (each module writes roughly EXPECTED_CHARS / 2).
+  const modDone = s.modules?.filter(m => m.status === 'done').length ?? 0
+  const modTotal = s.modules?.length ?? 1
+  const buildPct = status.build === 'done' ? 100
+    : Math.min(97, Math.round(((modDone + Math.min(0.9, chars / (EXPECTED_CHARS / 2))) / modTotal) * 100))
   const r = research?.data
   const pl = plan?.plan
   const imgById = new Map((plan?.images ?? []).map(i => [i.id, i]))
@@ -228,6 +232,12 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
                   <div className="agent-out">
                     <p className="agent-solution"><b>{pl.solution.title || OFFER_LABEL[pl.solution.type]}</b> <span className="mvp-choice-tag">{OFFER_LABEL[pl.solution.type] ?? pl.solution.type}</span></p>
                     {pl.solution.whyItWillClick && <p><b>Why it will click:</b> {pl.solution.whyItWillClick}</p>}
+                    {pl.modules && pl.modules.length > 0 && (
+                      <div className="agent-modules">
+                        <b>Modules:</b>
+                        {pl.modules.map(m => <span key={m.id} className="active-chip" title={m.purpose}>{m.name}</span>)}
+                      </div>
+                    )}
                     {pl.flow?.length > 0 && (
                       <ol className="agent-flow">
                         {pl.flow.slice(0, 7).map((f, i) => <li key={i}><b>{f.screen}</b>{f.userAction && ` — ${f.userAction}`}</li>)}
@@ -257,11 +267,24 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
 
                 {a.key === 'build' && (status.build === 'active' || status.build === 'done') && (
                   <div className="agent-out">
+                    {s.modules && s.modules.length > 0 && (
+                      <ol className="module-list">
+                        {s.modules.map(m => (
+                          <li key={m.id} className={m.status}>
+                            <span className="module-mark" aria-hidden>{m.status === 'done' ? '✓' : ''}</span>
+                            {m.name}
+                            {m.status === 'active' && <em>building</em>}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                     <div className="gap-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={buildPct} aria-label="Build progress">
                       <span className={status.build === 'done' ? 'is-still' : ''} style={{ width: `${buildPct}%` }} />
                     </div>
                     <p className="agent-note">
-                      {status.build === 'done' ? 'Site built, reviewed and fixed.' : `${buildAction || 'Starting'} · ${buildPct}% · ${Math.round(chars / 1000)} KB written`}
+                      {status.build === 'done'
+                        ? `App built: ${s.modules?.length ?? 1} modules, each checked.`
+                        : `${s.build?.module ? `${s.build.module}: ` : ''}${buildAction || 'Starting'} · ${Math.round(chars / 1000)} KB written`}
                     </p>
                   </div>
                 )}

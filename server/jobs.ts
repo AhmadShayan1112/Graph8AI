@@ -6,7 +6,7 @@ import { GeminiError } from './gemini.js'
 import { publicClaudeError } from './claude.js'
 import { campaignIdFor, getCampaignLead } from './campaigns.js'
 import { listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
-import { SOLUTION_TYPES, buildMvp, imagesFor, loadPlanById, planMvp, researchLead, savePlan } from './mvpAgents.js'
+import { SOLUTION_TYPES, buildModule, buildShell, imagesFor, loadPlanById, normalizeModules, planMvp, researchLead, savePlan } from './mvpAgents.js'
 
 // Background jobs: long work (MVP builds, gap analysis runs) belongs to the server, not to a browser tab.
 // A job is a MongoDB document that moves through steps. Each step runs in its own server call, kept alive
@@ -33,6 +33,8 @@ interface JobDoc {
   input: Record<string, any>
   state: Record<string, any>
   output: Record<string, any> | null
+  // The app being built, carried between module steps (not sent to pages while building).
+  workingHtml?: string
   error: string
   errorDetail: string
   cancelRequested: boolean
@@ -313,16 +315,45 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
     return 'build'
   }
 
-  if (job.step === 'build') {
+  // Build: the shell (with Home) first, then one module per step, then finish.
+  if (job.step === 'build' || job.step === 'shell' || job.step.startsWith('module:') || job.step === 'finish') {
     if (!auth.permissions.claude) throw Object.assign(new Error('MVP generation with Claude is turned off for this account.'), { status: 403 })
     const doc = await loadPlanById(String(s.planId ?? job.input.planId ?? ''))
     if (!doc) throw Object.assign(new Error('The plan for this build has expired. Plan the MVP again.'), { status: 400 })
-    await patch(job._id, { 'state.agents.build': 'active', 'state.buildStartedAt': new Date(), 'state.build': { chars: 0, action: 'Starting' } })
+    const modules = doc.plan.modules?.length ? doc.plan.modules : normalizeModules(undefined)
+    doc.plan.modules = modules
+    const moduleStatus = (doneThrough: number, active: number | null) =>
+      modules.map((m: any, i: number) => ({ id: m.id, name: m.name, status: i <= doneThrough ? 'done' : i === active ? 'active' : 'waiting' }))
     let lastSave = 0
-    const html = await buildMvp(doc, ({ action, chars }) => {
-      // Progress is saved at most every 2 seconds.
-      if (Date.now() - lastSave > 2000) { lastSave = Date.now(); void patch(job._id, { 'state.build': { chars, action } }) }
-    })
+    const progress = (label: string) => ({ action, chars }: { action: string; chars: number }) => {
+      if (Date.now() - lastSave > 2000) { lastSave = Date.now(); void patch(job._id, { 'state.build': { chars, action, module: label } }) }
+    }
+
+    if (job.step === 'build' || job.step === 'shell') {
+      await patch(job._id, {
+        'state.agents.build': 'active', 'state.buildStartedAt': s.buildStartedAt ?? new Date(),
+        'state.modules': moduleStatus(-1, 0), 'state.build': { chars: 0, action: 'Starting', module: 'App shell and Home' },
+      })
+      const html = await buildShell(doc, progress('App shell and Home'))
+      await (await jobs()).updateOne({ _id: job._id }, { $set: { workingHtml: html, 'state.modules': moduleStatus(0, modules.length > 1 ? 1 : null), updatedAt: new Date() } })
+      return modules.length > 1 ? 'module:1' : 'finish'
+    }
+
+    if (job.step.startsWith('module:')) {
+      const i = Number(job.step.slice('module:'.length))
+      const module = modules[i]
+      const current = (await (await jobs()).findOne({ _id: job._id }, { projection: { workingHtml: 1 } }))?.workingHtml
+      if (!current) return 'shell' // the shell was lost: start the build again
+      if (!module) return 'finish'
+      await patch(job._id, { 'state.modules': moduleStatus(i - 1, i), 'state.build': { chars: 0, action: 'Starting', module: module.name } })
+      const html = await buildModule(doc, current, module, progress(module.name))
+      await (await jobs()).updateOne({ _id: job._id }, { $set: { workingHtml: html, 'state.modules': moduleStatus(i, i + 1 < modules.length ? i + 1 : null), updatedAt: new Date() } })
+      return i + 1 < modules.length ? `module:${i + 1}` : 'finish'
+    }
+
+    // finish: save the draft and publish the result.
+    const html = (await (await jobs()).findOne({ _id: job._id }, { projection: { workingHtml: 1 } }))?.workingHtml
+    if (!html) return 'shell'
     const type = String(doc.plan?.solution?.type ?? 'booking-page')
     const { insertedId } = await (await getDb()).collection('mvp_drafts').insertOne({
       html, leadId: doc.leadId, leadName: doc.leadName, mvpType: type, createdAt: new Date(),
@@ -332,7 +363,8 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
       $set: {
         'state.agents.build': 'done',
         'state.buildDoneAt': new Date(),
-        'state.build': { chars: html.length, action: 'Done' },
+        'state.build': { chars: html.length, action: 'Done', module: '' },
+        'state.modules': moduleStatus(modules.length - 1, null),
         'state.plan': s.plan ?? doc.plan,
         'state.images': s.images ?? doc.images,
         output: {
@@ -340,12 +372,13 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
           tag: meta.title,
           description: String(doc.plan?.solution?.promise || meta.description),
           fixes: (doc.plan?.solution?.fixesGaps ?? []).join(', '),
-          steps: (doc.plan?.flow ?? []).map((f: any) => String(f.screen ?? '')).filter(Boolean),
+          steps: modules.map((m: any) => String(m.name)),
           html,
           draftId: String(insertedId),
           solutionType: type,
         },
       },
+      $unset: { workingHtml: '' },
     })
     return 'done'
   }

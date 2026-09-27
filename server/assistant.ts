@@ -91,7 +91,10 @@ Four agents build the MVP, with live progress for each:
    flow screen by screen. Everything is a web product; an app need becomes a mobile-first web app.
 3. Designer: palette, fonts, mood, industry animations (e.g. a toothbrush and sparkling tooth for a dentist) and
    real photos from Gapwise's library (e.g. a doctor for a clinic).
-4. Builder: Claude Code writes the site in its own workspace, reviews it against the plan and fixes it.
+4. Builder: builds a multi-module web app (4-6 modules, e.g. Home, Services, Online booking, My appointments,
+   Reviews & FAQ, an owner dashboard) that share one data store, so a booking made in one module shows in the
+   others. It builds the app shell and Home first, then one module per step, each checked; progress shows as a
+   module checklist.
 Choose a solution or keep "Let Gapwise decide" (the default; gap analysis's recommendation is marked), then
 press **Plan & build MVP** (about 3-6 minutes). **Rebuild with this plan** reruns only the builder. Preview it,
 **Deploy** to publish at <your site>/<business-name>, then **Write outreach**. Opening Build from Gap analysis

@@ -2884,6 +2884,18 @@ body {
 }
 @media (prefers-reduced-motion: reduce) { .dash-metric { transition: none; } .dash-metric:hover { transform: none; } }
 
+/* ─── MVP modules (build page) ─── */
+.agent-modules { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.module-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.module-list li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 99px; background: #F2F2EF; font-size: 12.5px; color: #6B7080; }
+.module-list li.done { background: #E3F5EC; color: #1B7A4E; font-weight: 500; }
+.module-list li.active { background: #EAF1FC; color: #2C5DBD; font-weight: 600; box-shadow: 0 0 0 1px #2C5DBD inset; }
+.module-list em { font-style: normal; font-size: 11px; opacity: 0.8; }
+.module-mark { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; background: #fff; }
+.module-list li.done .module-mark { background: #22A06B; color: #fff; }
+.module-list li.active .module-mark { background: #2C5DBD; animation: pulse 1.4s infinite; }
+@media (prefers-reduced-motion: reduce) { .module-list li.active .module-mark { animation: none; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {

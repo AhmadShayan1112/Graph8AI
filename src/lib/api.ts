@@ -125,6 +125,7 @@ export interface MvpPlanResult {
   plan: {
     solution: { type: string; title: string; promise: string; whyItWillClick: string; fixesGaps: string[] }
     flow: Array<{ step: number; screen: string; userAction: string; systemResponse: string }>
+    modules?: Array<{ id: string; name: string; purpose: string; features: string[]; data: string }>
     sections: Array<{ id: string; name: string; purpose: string; content: string }>
     interactions: Array<{ name: string; behaviour: string }>
     cta: { primary: string; secondary: string }
@@ -171,7 +172,8 @@ export interface MvpJobState {
   planId?: string
   plan?: MvpPlanResult['plan']
   images?: MvpPlanResult['images']
-  build?: { chars: number; action: string }
+  build?: { chars: number; action: string; module?: string }
+  modules?: Array<{ id: string; name: string; status: 'waiting' | 'active' | 'done' }>
   researchStartedAt?: string; researchDoneAt?: string
   planStartedAt?: string; planDoneAt?: string
   buildStartedAt?: string; buildDoneAt?: string
