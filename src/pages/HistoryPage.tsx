@@ -1,6 +1,7 @@
 import { useEffect, useState, type FC } from 'react'
 import { deleteSearch, getSearch, listSearches, type SavedSearch, type SavedSearchSummary } from '../lib/api'
 import { useSession } from '../components/LoginGate'
+import { confirmDialog } from '../components/Dialog'
 
 function describe(s: SavedSearchSummary) {
   const f = s.filters
@@ -49,7 +50,12 @@ const HistoryPage: FC<{ onOpen: (s: SavedSearch) => void }> = ({ onOpen }) => {
   }
 
   const remove = async (s: SavedSearchSummary) => {
-    if (!confirm(`Delete the saved search "${describe(s)}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Delete this saved search?',
+      message: `“${describe(s)}” and its saved results are removed from History. Leads already saved to a campaign stay there.`,
+      confirmLabel: 'Delete search',
+      tone: 'danger',
+    }))) return
     setBusyId(s.id)
     setError('')
     try {

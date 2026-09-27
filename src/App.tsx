@@ -16,6 +16,7 @@ import DashboardPage from './pages/DashboardPage'
 import SupportPage from './pages/SupportPage'
 import AssistantWidget from './components/AssistantWidget'
 import GapRunnerChip from './components/GapRunnerChip'
+import { DialogHost } from './components/Dialog'
 import { initRunner } from './lib/gapRunner'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
@@ -49,12 +50,14 @@ function App() {
         <LandingPage onEnterApp={() => { window.location.hash = '#/dashboard'; setView('app') }} />
         {/* Visitors get the public assistant; its links into the app (#/...) open sign-in. */}
         <AssistantWidget publicSite page="landing" onRoute={hash => { window.location.hash = hash }} />
+        <DialogHost />
       </>
     )
   }
 
   return (
     <LoginGate>
+      <DialogHost />
       <Workspace
         onLanding={() => {
           window.history.pushState(null, '', window.location.pathname + window.location.search)

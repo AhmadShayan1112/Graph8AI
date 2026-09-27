@@ -4,6 +4,7 @@ import {
   type Campaign, type CampaignDetail, type CampaignInput, type CampaignLead, type CampaignSummary, type SavedSearch,
 } from '../lib/api'
 import { useSession } from '../components/LoginGate'
+import { confirmDialog } from '../components/Dialog'
 
 interface Props {
   // Campaign to show when the page opens (e.g. coming back from Discover).
@@ -205,7 +206,12 @@ const CampaignView: FC<Props & { id: string }> = ({ id, onOpenId, onSearch, onOp
   const { campaign, leads, searches } = data
 
   const remove = async () => {
-    if (!confirm(`Delete "${campaign.name}" with its ${leads.length} saved leads and ${searches.length} searches? This cannot be undone.`)) return
+    if (!(await confirmDialog({
+      title: `Delete “${campaign.name}”?`,
+      message: `Its ${leads.length} saved lead${leads.length === 1 ? '' : 's'}, ${searches.length} search${searches.length === 1 ? '' : 'es'}, market analysis and gap analyses are deleted too. This cannot be undone.`,
+      confirmLabel: 'Delete campaign',
+      tone: 'danger',
+    }))) return
     setBusy('delete')
     try {
       await deleteCampaign(campaign.id)
@@ -218,7 +224,12 @@ const CampaignView: FC<Props & { id: string }> = ({ id, onOpenId, onSearch, onOp
   }
 
   const removeLead = async (lead: CampaignLead) => {
-    if (!confirm(`Remove ${lead.name} from this campaign?`)) return
+    if (!(await confirmDialog({
+      title: `Remove ${lead.name}?`,
+      message: 'The lead is removed from this campaign. It can come back if a future search in the campaign finds it again.',
+      confirmLabel: 'Remove lead',
+      tone: 'danger',
+    }))) return
     setBusy(lead.id)
     try {
       await removeCampaignLead(campaign.id, lead.id)

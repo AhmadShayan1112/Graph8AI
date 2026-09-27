@@ -9,6 +9,7 @@ import {
 } from '../lib/gapRunner'
 import { useSession } from '../components/LoginGate'
 import { buildLeadReport, openReportWindow, showReport } from '../lib/report'
+import { confirmDialog } from '../components/Dialog'
 
 interface Props {
   campaignId: string | null
@@ -110,11 +111,16 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   }
 
   // One lead at a time: each is a web-research call, and a sequence keeps within the rate limits.
-  const analyseAll = () => {
+  const analyseAll = async () => {
     if (!campaign) return
     const todo = leads.filter(l => !results[l.id])
     if (!todo.length) return
-    if (!confirm(`Run gap analysis on ${todo.length} lead${todo.length > 1 ? 's' : ''}? Each one is a web research run and takes up to a minute. You can keep using Gapwise while it runs.`)) return
+    if (!(await confirmDialog({
+      title: `Analyse ${todo.length} lead${todo.length > 1 ? 's' : ''}?`,
+      message: `Gapwise researches each lead on the web, one at a time, which takes up to a minute per lead${todo.length > 1 ? ` (about ${Math.ceil(todo.length * 0.75)} min in total)` : ''}. You can keep using Gapwise while it runs; progress shows in the sidebar.`,
+      confirmLabel: 'Start analysis',
+      tone: 'info',
+    }))) return
     startRun(campaign, todo)
   }
 

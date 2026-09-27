@@ -3,6 +3,7 @@ import {
   createUser, deleteUser, getSettings, getWorkspaceAccess, listUsers, setWorkspaceAccess, updateUser,
   type AppUser, type Permission, type Permissions, type SettingsStatus, type WorkspaceAccess,
 } from '../lib/api'
+import { confirmDialog, promptDialog } from '../components/Dialog'
 
 const KEYS: Array<{ id: Permission; label: string; help: string }> = [
   { id: 'claude', label: 'Claude', help: 'Build MVP sites' },
@@ -40,7 +41,14 @@ const UsersPage: FC = () => {
   const setForEveryone = async (key: keyof WorkspaceAccess, on: boolean) => {
     const what = key === 'graph8ForEveryone' ? 'Graph8 access? Everyone, including new sign-ups, will be able to search and enrich leads'
       : 'gap analysis? Everyone, including new sign-ups, will be able to run it'
-    if (on && !confirm(`Give every user ${what} with the workspace key.`)) return
+    if (on && !(await confirmDialog({
+      title: key === 'graph8ForEveryone' ? 'Open Graph8 to every user?' : 'Open gap analysis to every user?',
+      message: key === 'graph8ForEveryone'
+        ? 'Everyone, including new sign-ups, will be able to search and enrich leads with the workspace Graph8 key. You can turn this off at any time.'
+        : 'Everyone, including new sign-ups, will be able to run gap analysis with the workspace key. You can turn this off at any time.',
+      confirmLabel: 'Turn on for everyone',
+      tone: 'info',
+    }))) return
     setAccessBusy(true)
     setError('')
     try {
@@ -231,8 +239,13 @@ function useRowActions({ user, onChange, onRemove }: RowProps) {
   const patch = (p: Parameters<typeof updateUser>[1], done?: string) =>
     run(async () => onChange((await updateUser(user.id, p)).user), done)
 
-  const del = (what: string) => {
-    if (!confirm(`${what} ${user.username}? This cannot be undone.`)) return
+  const del = async (what: string) => {
+    if (!(await confirmDialog({
+      title: `${what} ${user.username}?`,
+      message: 'Their account, campaigns, search history and support requests are removed. This cannot be undone.',
+      confirmLabel: `${what} user`,
+      tone: 'danger',
+    }))) return
     run(async () => { await deleteUser(user.id); onRemove(user.id) })
   }
 
@@ -245,8 +258,16 @@ const UserRow: FC<RowProps> = props => {
   const { user } = props
   const { busy, message, patch, del } = useRowActions(props)
 
-  const resetPassword = () => {
-    const pw = prompt(`New password for ${user.username} (8+ characters). They will be signed out.`)
+  const resetPassword = async () => {
+    const pw = await promptDialog({
+      title: `Reset ${user.username}'s password`,
+      message: 'They will be signed out everywhere and need the new password to sign in again.',
+      label: 'New password',
+      type: 'password',
+      placeholder: 'At least 8 characters',
+      confirmLabel: 'Reset password',
+      validate: v => (v.length < 8 ? 'Use at least 8 characters.' : v.length > 200 ? 'Use at most 200 characters.' : null),
+    })
     if (pw) patch({ password: pw }, 'Password changed. Share it with them securely.')
   }
 

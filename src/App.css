@@ -2667,6 +2667,46 @@ body {
 .key-checks .bad strong { color: #C0341D; }
 .key-hint { color: #5E636E; font-size: 12.5px; border-top: 1px solid #EEEEEA; padding-top: 6px; }
 
+/* ─── Dialogs (replace the browser's confirm / prompt) ─── */
+.dlg-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px;
+  background: rgba(15, 17, 22, 0.45); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: dlgFade 0.18s ease both;
+}
+.dlg {
+  width: min(440px, 100%); background: #fff; border-radius: 16px;
+  box-shadow: 0 30px 80px -20px rgba(15, 17, 22, 0.45), 0 0 0 1px rgba(15, 17, 22, 0.06);
+  animation: dlgPop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.dlg form { display: flex; flex-direction: column; gap: 18px; padding: 22px; }
+.dlg-top { display: flex; gap: 14px; align-items: flex-start; }
+.dlg-icon { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: #FBF3DC; color: #7A5B00; }
+.dlg-danger .dlg-icon { background: #FDEBEC; color: #C0341D; }
+.dlg-info .dlg-icon { background: #EEF2FC; color: #2C5DBD; }
+.dlg-text { min-width: 0; }
+.dlg-text h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
+.dlg-message { margin-top: 6px; font-size: 14px; line-height: 1.55; color: #5E636E; }
+.dlg-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+.dlg-field .input { width: 100%; height: 42px; font-size: 15px; }
+.dlg-field .input[aria-invalid="true"] { border-color: #C0341D; }
+.dlg-error { font-size: 12.5px; font-weight: 400; color: #C0341D; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dlg-actions button { min-width: 96px; height: 40px; border-radius: 10px; }
+.dlg-actions .btn-primary:focus-visible, .dlg-actions .btn-secondary:focus-visible { outline: 2px solid #2C5DBD; outline-offset: 2px; }
+.btn-primary.dlg-danger { background: #C0341D; }
+.btn-primary.dlg-danger:hover { background: #A52A15; }
+@keyframes dlgFade { from { opacity: 0; } }
+@keyframes dlgPop { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@keyframes dlgSheet { from { transform: translateY(100%); } }
+@media (max-width: 600px) {
+  /* On phones the dialog is a sheet from the bottom, with thumb-sized buttons. */
+  .dlg-backdrop { place-items: end stretch; padding: 0; }
+  .dlg { width: 100%; border-radius: 18px 18px 0 0; animation: dlgSheet 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both; padding-bottom: env(safe-area-inset-bottom); }
+  .dlg-actions { flex-direction: column-reverse; }
+  .dlg-actions button { width: 100%; height: 46px; }
+}
+@media (prefers-reduced-motion: reduce) { .dlg-backdrop, .dlg { animation: none; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {

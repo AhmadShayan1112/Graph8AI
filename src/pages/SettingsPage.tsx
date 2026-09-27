@@ -3,6 +3,7 @@ import {
   deleteSecret, getGeminiModels, getSettings, saveSecret, setGeminiModel, testGeminiKey,
   type GeminiModelOption, type SecretKind, type SettingsStatus,
 } from '../lib/api'
+import { confirmDialog } from '../components/Dialog'
 
 const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder: string }> = [
   {
@@ -124,7 +125,12 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
   }
 
   const remove = async () => {
-    if (!confirm(`Delete the saved ${label}? This takes effect immediately.`)) return
+    if (!(await confirmDialog({
+      title: `Delete the ${label}?`,
+      message: 'It is removed right away, and anything that uses it stops working until a new one is saved.',
+      confirmLabel: 'Delete key',
+      tone: 'danger',
+    }))) return
     setBusy('delete')
     setMessage(null)
     try {
