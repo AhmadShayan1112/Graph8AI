@@ -17,7 +17,7 @@ import {
 } from './graph8.js'
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
 import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
-import { deleteSecret, getWorkspaceAccess, secretStatus, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
+import { deleteSecret, getGeminiModel, getWorkspaceAccess, secretStatus, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
 import { generateSiteHtml, publicClaudeError } from './claude.js'
 import { getDb } from './db.js'
 import {
@@ -30,7 +30,7 @@ import {
   getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
 import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
-import { GeminiError, testGemini } from './gemini.js'
+import { GeminiError, listGeminiModels, modelInUse, resetModelChoice, testGemini } from './gemini.js'
 import { assistantChat, publicAssistantChat } from './assistant.js'
 import { createTicket, createVisitorTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
 
@@ -114,6 +114,31 @@ app.post('/api/settings-test/gemini', requireAdmin, async (_req, res) => {
     res.json(await testGemini())
   } catch (err: any) {
     res.status(502).json({ error: err.message })
+  }
+})
+
+// Admin: which Gemini model to use. Empty means automatic (cheapest available, with fallback).
+app.get('/api/settings-model/gemini', requireAdmin, async (_req, res) => {
+  try {
+    const [choice, list] = await Promise.all([getGeminiModel(), listGeminiModels()])
+    res.json({ current: choice.model, strict: choice.strict, inUse: modelInUse(), ...list })
+  } catch (err: any) {
+    console.error('[settings] model list failed:', err.message)
+    res.status(502).json({ error: 'Could not load the model list.' })
+  }
+})
+
+app.put('/api/settings-model/gemini', requireAdmin, async (req, res) => {
+  const model = typeof req.body?.model === 'string' ? req.body.model.trim() : ''
+  const strict = req.body?.strict === true
+  if (model && !/^[a-z0-9][a-z0-9.\-]{2,80}$/.test(model)) { res.status(400).json({ error: 'That is not a valid model name.' }); return }
+  try {
+    await setGeminiModel({ model, strict: !!model && strict })
+    resetModelChoice()
+    res.json({ current: model, strict: !!model && strict })
+  } catch (err: any) {
+    console.error('[settings] model save failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
   }
 })
 

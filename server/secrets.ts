@@ -11,6 +11,10 @@ interface SettingsDoc {
   claudeTokenUpdatedAt?: Date
   geminiApiKey?: string
   geminiApiKeyUpdatedAt?: Date
+  // The Gemini model the admin chose; empty means automatic (cheapest available).
+  geminiModel?: string
+  // true: use only the chosen model, never fall back to another.
+  geminiModelStrict?: boolean
   // Workspace-wide access the admin grants to every user on top of their own switches.
   graph8ForEveryone?: boolean
   geminiForEveryone?: boolean
@@ -97,4 +101,26 @@ export async function setWorkspaceAccess(access: Partial<WorkspaceAccess>) {
   await (await settings()).updateOne({ _id: 'app' }, { $set }, { upsert: true })
   accessCache = null
   return getWorkspaceAccess()
+}
+
+// Read on every model call, so a short per-instance cache avoids a DB read each time.
+export interface ModelChoice { model: string; strict: boolean }
+let modelCache: { value: ModelChoice; at: number } | null = null
+export async function getGeminiModel(): Promise<ModelChoice> {
+  if (modelCache && Date.now() - modelCache.at < 15_000) return modelCache.value
+  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { geminiModel: 1, geminiModelStrict: 1 } }).catch(() => null)
+  const value = { model: doc?.geminiModel ?? '', strict: !!doc?.geminiModel && doc?.geminiModelStrict === true }
+  modelCache = { value, at: Date.now() }
+  return value
+}
+
+export async function setGeminiModel(choice: ModelChoice) {
+  await (await settings()).updateOne(
+    { _id: 'app' },
+    choice.model
+      ? { $set: { geminiModel: choice.model, geminiModelStrict: choice.strict } }
+      : { $unset: { geminiModel: '', geminiModelStrict: '' } },
+    { upsert: true },
+  )
+  modelCache = null
 }

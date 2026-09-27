@@ -1,5 +1,8 @@
 import { useEffect, useState, type FC, type FormEvent } from 'react'
-import { deleteSecret, getSettings, saveSecret, testGeminiKey, type SecretKind, type SettingsStatus } from '../lib/api'
+import {
+  deleteSecret, getGeminiModels, getSettings, saveSecret, setGeminiModel, testGeminiKey,
+  type GeminiModelOption, type SecretKind, type SettingsStatus,
+} from '../lib/api'
 
 const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder: string }> = [
   {
@@ -174,6 +177,7 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
         )}
       </div>
       {message && <div className={`settings-message ${message.ok ? 'ok' : 'bad'}`}>{message.text}</div>}
+      {kind === 'gemini' && savedHere && <GeminiModelPicker />}
       {checks && (
         <ul className="key-checks">
           {checks.map(c => (
@@ -194,3 +198,89 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
 }
 
 export default SettingsPage
+
+// Which Gemini model to use. Automatic picks the cheapest model this key can use and falls back if one is
+// out of quota. A chosen model is tried first; with fallback on, others take over when it is busy, and with
+// fallback off only the chosen model is ever used.
+const GeminiModelPicker: FC = () => {
+  const [models, setModels] = useState<GeminiModelOption[] | null>(null)
+  const [current, setCurrent] = useState('')
+  const [strict, setStrict] = useState(false)
+  const [inUse, setInUse] = useState<string | null>(null)
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    getGeminiModels()
+      .then(r => {
+        setModels(r.models)
+        setCurrent(r.current)
+        setStrict(r.strict)
+        setInUse(r.inUse)
+        if (r.error) setNote({ text: r.error, ok: false })
+      })
+      .catch(err => setNote({ text: err.message, ok: false }))
+  }, [])
+
+  const save = async (model: string, onlyThis: boolean) => {
+    setSaving(true)
+    setNote(null)
+    try {
+      const r = await setGeminiModel(model, onlyThis)
+      setCurrent(r.current)
+      setStrict(r.strict)
+      setNote({
+        text: !r.current ? 'Saved. Gapwise will pick the cheapest available model.'
+          : r.strict ? `Saved. Gapwise will use only ${r.current}.`
+          : `Saved. Gapwise will use ${r.current} first and switch to another model when it is busy.`,
+        ok: true,
+      })
+    } catch (err: any) {
+      setNote({ text: err.message, ok: false })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Keep a saved choice selectable even if the key no longer lists it.
+  const options = models && current && !models.some(m => m.id === current)
+    ? [{ id: current, label: 'not offered by this key', cheap: false }, ...models]
+    : models ?? []
+
+  return (
+    <div className="model-picker">
+      <label className="settings-card-label" htmlFor="gemini-model">Model</label>
+      <div className="settings-card-row">
+        <select
+          id="gemini-model"
+          className="input settings-input"
+          value={current}
+          disabled={!models || saving}
+          onChange={e => save(e.target.value, e.target.value ? strict : false)}
+        >
+          <option value="">Automatic: cheapest available (recommended)</option>
+          {options.map(m => (
+            <option key={m.id} value={m.id}>
+              {m.id}{m.cheap ? ' (cheapest)' : ''}{m.label && m.label !== m.id ? ` — ${m.label}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      {current && (
+        <label className="model-fallback">
+          <input type="checkbox" checked={!strict} disabled={saving} onChange={e => save(current, !e.target.checked)} />
+          <span>If {current} is busy or out of quota, use another model so gap analysis and the assistant keep working</span>
+        </label>
+      )}
+      <div className="settings-card-help">
+        {models ? `${models.length} models available to this key. ` : 'Loading the models this key can use… '}
+        Lite models cost the least and have the highest free limits.
+        {inUse && <> Last answer came from <strong>{inUse}</strong>{current && inUse !== current ? ' (a fallback)' : ''}.</>}
+      </div>
+      {current && strict && (
+        <div className="settings-message bad">Fallback is off: if {current} hits its limit, gap analysis and the assistant will stop until it recovers.</div>
+      )}
+      {note && <div className={`settings-message ${note.ok ? 'ok' : 'bad'}`}>{note.text}</div>}
+    </div>
+  )
+}

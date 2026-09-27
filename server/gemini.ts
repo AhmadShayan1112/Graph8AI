@@ -1,4 +1,4 @@
-import { getGeminiKey } from './secrets.js'
+import { getGeminiKey, getGeminiModel } from './secrets.js'
 
 // Gemini with Google Search grounding, so answers about a business come from what is on the web now.
 // Users never see which provider does the research: their messages are provider-neutral. The admin gets
@@ -48,14 +48,48 @@ async function availableModels(key: string) {
   }
 }
 
-// GEMINI_MODEL (if set) wins; otherwise the model that last worked, then the cheap-first list. Only models
+// The admin's choice in Settings comes first (then GEMINI_MODEL), then the model that last worked, then the
+// cheap-first list. If the chosen model is out of quota the others still keep things running. Only models
 // this key actually offers are kept when the list could be read.
 async function candidates(key: string) {
+  const choice = await getGeminiModel()
+  // "Only this model": no fallback, the admin's choice or nothing.
+  if (choice.model && choice.strict) return [choice.model]
+  const chosen = choice.model || process.env.GEMINI_MODEL || ''
   const offered = await availableModels(key)
-  const wanted = [process.env.GEMINI_MODEL, workingModel, ...PREFERRED, ...offered].filter((m): m is string => !!m)
-  const usable = offered.length ? wanted.filter(m => m === process.env.GEMINI_MODEL || offered.includes(m)) : wanted
+  const wanted = [chosen, workingModel, ...PREFERRED, ...offered].filter((m): m is string => !!m)
+  const usable = offered.length ? wanted.filter(m => m === chosen || offered.includes(m)) : wanted
   return [...new Set(usable)].slice(0, 6)
 }
+
+// For the Settings dropdown: every Gemini text model this key can call, cheapest first.
+export async function listGeminiModels() {
+  const key = await getGeminiKey()
+  if (!key) return { models: [] as Array<{ id: string; label: string; cheap: boolean }>, error: 'Save a Gemini API key first.' }
+  const res = await fetch(`${BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    return { models: [], error: `Google: ${res.status} ${String(err?.error?.message ?? res.statusText).slice(0, 200)}` }
+  }
+  const data = await res.json()
+  const models = (data?.models ?? [])
+    .filter((m: any) => (m.supportedGenerationMethods ?? []).includes('generateContent'))
+    .map((m: any) => ({ id: String(m.name).replace(/^models\//, ''), label: String(m.displayName ?? '') }))
+    .filter((m: { id: string }) => /^gemini-/.test(m.id) && !/(image|tts|audio|live|embed|vision)/.test(m.id))
+    .map((m: { id: string; label: string }) => ({ ...m, cheap: /lite/.test(m.id) }))
+    .sort((a: { id: string; cheap: boolean }, b: { id: string; cheap: boolean }) =>
+      Number(b.cheap) - Number(a.cheap) || Number(/pro/.test(a.id)) - Number(/pro/.test(b.id)) || b.id.localeCompare(a.id))
+  listed = null
+  return { models, error: '' }
+}
+
+// Called when the admin changes the model, so the next call starts from their choice.
+export function resetModelChoice() {
+  workingModel = null
+}
+
+// The model that answered most recently on this server instance (for the Settings page).
+export const modelInUse = () => workingModel
 
 function retryDelayMs(body: any) {
   const info = (body?.error?.details ?? []).find((d: any) => String(d?.['@type'] ?? '').includes('RetryInfo'))

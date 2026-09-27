@@ -413,3 +413,11 @@ export interface GeminiCheck { ok: boolean; model?: string; error?: string }
 // Admin: one plain and one web-search request with the saved Gemini key.
 export const testGeminiKey = () =>
   apiFetch<{ assistant: GeminiCheck; research: GeminiCheck }>('/settings-test/gemini', { method: 'POST' })
+
+export interface GeminiModelOption { id: string; label: string; cheap: boolean }
+export const getGeminiModels = () =>
+  apiFetch<{ current: string; strict: boolean; inUse: string | null; models: GeminiModelOption[]; error: string }>('/settings-model/gemini')
+// An empty model means automatic: the cheapest model the key can use, with fallback.
+// `strict` uses only the chosen model and never falls back.
+export const setGeminiModel = (model: string, strict: boolean) =>
+  apiFetch<{ current: string; strict: boolean }>('/settings-model/gemini', { method: 'PUT', body: JSON.stringify({ model, strict }) })
