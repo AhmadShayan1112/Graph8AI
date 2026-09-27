@@ -55,7 +55,11 @@ async function resolveSession(req: Request): Promise<AuthInfo | null> {
 async function userAuth(id: string, sessionVersion: number): Promise<AuthInfo | null> {
   const [user, workspace] = await Promise.all([getSessionUser(id, sessionVersion), getWorkspaceAccess()])
   if (!user) return null
-  const permissions = { ...user.permissions, graph8: user.permissions.graph8 || workspace.graph8ForEveryone }
+  const permissions = {
+    ...user.permissions,
+    graph8: user.permissions.graph8 || workspace.graph8ForEveryone,
+    gemini: user.permissions.gemini || workspace.geminiForEveryone,
+  }
   return { role: 'user', userId: user.id, username: user.username, permissions }
 }
 

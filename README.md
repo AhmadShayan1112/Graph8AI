@@ -29,7 +29,7 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 - For each user the admin switches **Claude** (MVP generation) and **Graph8** (lead search and enrichment)
   on or off. Users share the workspace keys but never see them. Access is checked on the server for every
   request, so a change, disable or delete takes effect immediately. A password reset signs that user out.
-- **Graph8 for everyone** (Users page) opens Graph8 to every user, including new sign-ups, on top of their own
+- **Graph8 for everyone** and **Gemini for everyone** (Users page) open that key to every user, including new sign-ups, on top of their own
   switches. Turning it off returns to per-user access. Claude always stays per user.
 - User passwords are hashed with scrypt in the `users` collection.
 - Every lead search is saved with its results in the `searches` collection (latest 200 per person).

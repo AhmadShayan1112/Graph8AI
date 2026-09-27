@@ -37,12 +37,14 @@ const UsersPage: FC = () => {
     getWorkspaceAccess().then(setAccess).catch(() => {})
   }, [])
 
-  const setGraph8ForEveryone = async (on: boolean) => {
-    if (on && !confirm('Give every user Graph8 access? Everyone, including new sign-ups, will be able to search and enrich leads with the workspace Graph8 key.')) return
+  const setForEveryone = async (key: keyof WorkspaceAccess, on: boolean) => {
+    const what = key === 'graph8ForEveryone' ? 'Graph8 access? Everyone, including new sign-ups, will be able to search and enrich leads'
+      : 'Gemini access? Everyone, including new sign-ups, will be able to run gap analysis'
+    if (on && !confirm(`Give every user ${what} with the workspace key.`)) return
     setAccessBusy(true)
     setError('')
     try {
-      setAccess(await setWorkspaceAccess({ graph8ForEveryone: on }))
+      setAccess(await setWorkspaceAccess({ [key]: on } as Partial<WorkspaceAccess>))
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -50,7 +52,12 @@ const UsersPage: FC = () => {
     }
   }
 
-  const everyone: Partial<Permissions> = { graph8: !!access?.graph8ForEveryone }
+  const everyone: Partial<Permissions> = { graph8: !!access?.graph8ForEveryone, gemini: !!access?.geminiForEveryone }
+  const openToAll = [access?.graph8ForEveryone && 'Graph8', access?.geminiForEveryone && 'Gemini'].filter(Boolean)
+  const EVERYONE_SWITCHES: Array<{ key: keyof WorkspaceAccess; label: string; help: string }> = [
+    { key: 'graph8ForEveryone', label: 'Graph8 for everyone', help: 'Every user, including new sign-ups, can search, enrich and analyse leads.' },
+    { key: 'geminiForEveryone', label: 'Gemini for everyone', help: 'Every user, including new sign-ups, can run gap analysis with web search.' },
+  ]
 
   const replace = (u: AppUser) => setUsers(list => list?.map(x => (x.id === u.id ? u : x)) ?? null)
   const remove = (id: string) => setUsers(list => list?.filter(x => x.id !== id) ?? null)
@@ -83,25 +90,24 @@ const UsersPage: FC = () => {
         <section className="settings-card">
           <div className="settings-card-head">
             <span className="settings-card-label">Access for everyone</span>
-            <span className={`settings-badge ${access?.graph8ForEveryone ? 'ok' : ''}`}>
-              {access?.graph8ForEveryone ? 'Graph8 open to all' : 'Per user'}
+            <span className={`settings-badge ${openToAll.length ? 'ok' : ''}`}>
+              {openToAll.length ? `${openToAll.join(' & ')} open to all` : 'Per user'}
             </span>
           </div>
-          <label className="user-perm everyone-row">
-            <Toggle
-              on={!!access?.graph8ForEveryone}
-              label="Graph8 for everyone"
-              disabled={!access || accessBusy}
-              onChange={setGraph8ForEveryone}
-            />
-            <span>
-              <strong>Graph8 for everyone</strong>
-              <span className="settings-card-help everyone-help">
-                Every user, including new sign-ups, can search, enrich and analyse leads. Turn it off to go back to each
-                user's own switch below.
+          {EVERYONE_SWITCHES.map(sw => (
+            <label key={sw.key} className="user-perm everyone-row">
+              <Toggle
+                on={!!access?.[sw.key]}
+                label={sw.label}
+                disabled={!access || accessBusy}
+                onChange={on => setForEveryone(sw.key, on)}
+              />
+              <span>
+                <strong>{sw.label}</strong>
+                <span className="settings-card-help everyone-help">{sw.help} Turn it off to go back to each user's own switch below.</span>
               </span>
-            </span>
-          </label>
+            </label>
+          ))}
           <div className="settings-card-help">Claude stays per user, because MVP generation spends credits on every build.</div>
         </section>
 
