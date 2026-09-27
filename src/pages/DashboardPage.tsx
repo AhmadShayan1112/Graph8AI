@@ -93,7 +93,7 @@ const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOp
 
       {data && (
         <>
-          <section className="dash-stats" aria-label="Totals">
+          <section className="dash-stats" aria-label="Totals" data-tour="dash-stats">
             {[
               { label: 'Campaigns', value: t!.campaigns, go: () => onNavigate('campaigns') },
               { label: 'Saved leads', value: t!.leads, go: () => onNavigate('campaigns') },

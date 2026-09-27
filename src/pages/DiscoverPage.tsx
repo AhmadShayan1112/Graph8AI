@@ -155,7 +155,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOp
           </div>
         )}
 
-        <div className="prompt-card">
+        <div className="prompt-card" data-tour="discover-search">
           <div className="prompt-row">
             <span className="prompt-spark" aria-hidden>✦</span>
             <input

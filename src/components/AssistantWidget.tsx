@@ -139,6 +139,7 @@ const AssistantWidget: FC<Props> = ({ page, onRoute, publicSite = false }) => {
     <>
       <button
         className={`assist-launcher ${open ? 'is-open' : ''}`}
+        data-tour="assistant"
         onClick={() => setOpen(o => !o)}
         aria-label={open ? 'Close the assistant' : 'Open the Gapwise assistant'}
         aria-expanded={open}

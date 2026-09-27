@@ -18,6 +18,7 @@ import AssistantWidget from './components/AssistantWidget'
 import GapRunnerChip from './components/GapRunnerChip'
 import { DialogHost } from './components/Dialog'
 import LeadPicker from './components/LeadPicker'
+import Tour, { type TourStep } from './components/Tour'
 import { initRunner } from './lib/gapRunner'
 import type { MvpJobSummary } from './lib/gapRunner'
 import LoginGate, { useSession } from './components/LoginGate'
@@ -195,6 +196,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   const handleNavigate = (id: string) => {
     if (id === 'back') { goBack(); return }
+    if (id === 'tour') { setMobileMenuOpen(false); setTour('main'); return }
     if (id === 'landing') { setMobileMenuOpen(false); onLanding(); return }
     if (id === 'logout') {
       try { sessionStorage.removeItem(SAVED) } catch { /* ignore */ }
@@ -226,6 +228,64 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin])
+
+  // ── Guided tour and first-visit page hints ──
+  const [tour, setTour] = useState<null | 'main' | string>(null)
+  const seenKey = (what: string) => `gapwise:${what}:${user.username}`
+  const seen = (what: string) => { try { return localStorage.getItem(seenKey(what)) === '1' } catch { return true } }
+  const markSeen = (what: string) => { try { localStorage.setItem(seenKey(what), '1') } catch { /* ignore */ } }
+  const isPhone = () => window.matchMedia('(max-width: 768px)').matches
+  // On phones the menu is a drawer: open it for steps that point into it, close it for the rest.
+  const inMenu = () => setMobileMenuOpen(isPhone())
+  const outOfMenu = () => setMobileMenuOpen(false)
+
+  const MAIN_TOUR: TourStep[] = [
+    { title: 'Welcome to Gapwise', prepare: outOfMenu, body: <>Gapwise takes you from a market to a signed client: find local businesses with weak websites, research what each one is missing, build them a working solution and send it. Here is the flow in six steps.</> },
+    { target: 'nav-campaigns', prepare: inMenu, title: '1. Start with a campaign', body: <>A campaign is one goal, like <b>“Dentists in Lahore”</b>. Every search and every lead you find is saved inside it.</> },
+    { target: 'nav-discover', prepare: inMenu, title: '2. Find leads', body: <>Describe who you want and Gapwise searches millions of companies. Filter by industry, location, size and whether they have a website.</> },
+    { target: 'nav-gaps', prepare: inMenu, title: '3. Run gap analysis', body: <>Gapwise researches each lead on the web and finds its real gaps, what it needs, and how to pitch it, with a fit score.</> },
+    { target: 'nav-analysis', prepare: inMenu, title: 'Size the market', body: <>See how many businesses match your campaign, how many have no website, and where the best opportunity is.</> },
+    { target: 'nav-audit', prepare: inMenu, title: '4. Audit a lead', body: <>Open any lead to see its scores, the decision maker and a verified email. Export it as a PDF report.</> },
+    { target: 'nav-build', prepare: inMenu, title: '5. Build the MVP', body: <>Four agents research, plan, design and build a working web solution for the lead. It keeps running even if you leave the page.</> },
+    { target: 'nav-outreach', prepare: inMenu, title: '6. Send it', body: <>Write the outreach email with the live link to the MVP, plus a follow-up plan.</> },
+    { target: 'dash-stats', prepare: () => { outOfMenu(); setPage('dashboard') }, title: 'Track your progress', body: <>The Dashboard shows your totals, hot, warm and cold leads, and what to do next.</> },
+    { target: 'assistant', prepare: outOfMenu, title: 'Help is one click away', body: <>Ask the assistant how to do anything, or choose <b>Talk to a person</b> to reach the team.</> },
+    { target: 'take-tour', prepare: inMenu, title: 'You are ready', body: <>Replay this tour any time from here. Start by creating your first campaign.</> },
+  ]
+
+  const PAGE_HINTS: Record<string, TourStep> = {
+    campaigns: { target: 'new-campaign', title: 'Create your first campaign', body: <>Name it and set the industries and locations you want to sell to. Then press <b>Search in this campaign</b>.</> },
+    discover: { target: 'discover-search', title: 'Describe who you want', body: <>Try <b>“Dentists in Lahore”</b> and press <b>Search leads</b>. Leads are saved to a campaign automatically.</> },
+    gaps: { target: 'gaps-run', title: 'Analyse your leads', body: <><b>Analyse all</b> researches every lead one by one. It runs on the server, so you can leave the page.</> },
+    analysis: { target: 'analysis-run', title: 'Size this market', body: <>Press this to get the market size, businesses without a website and the best segment to target.</> },
+    build: { target: 'build-start', title: 'Build the MVP', body: <>Keep <b>Let Gapwise decide</b> and press <b>Plan &amp; build</b>. The agents fix the lead's top gap.</> },
+  }
+
+  // Only people who just signed up get onboarding: the main tour first, then a one-time hint on each main
+  // page once its button is on screen. Everyone can still replay the tour from the menu.
+  const onboarding = seen('onboarding')
+  useEffect(() => {
+    if (onboarding && !seen('tour')) { const t = setTimeout(() => setTour('main'), 700); return () => clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.username])
+  useEffect(() => {
+    const hint = PAGE_HINTS[page]
+    if (!onboarding || !hint || tour || !seen('tour') || seen(`hint-${page}`)) return
+    let tries = 0
+    const t = setInterval(() => {
+      if (document.querySelector(`[data-tour="${hint.target}"]`)) { clearInterval(t); setTour(page) }
+      else if (++tries > 20) clearInterval(t) // the button isn't there (no access, empty state): try another time
+    }, 250)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, tour])
+
+  const closeTour = () => {
+    if (tour === 'main') markSeen('tour')
+    else if (tour) markSeen(`hint-${tour}`)
+    setTour(null)
+    setMobileMenuOpen(false)
+  }
 
   // Pick up a gap-analysis run this person's last visit left unfinished.
   useEffect(() => { initRunner(user.username) }, [user.username])
@@ -413,6 +473,11 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
       </main>
 
       <AssistantWidget page={page} onRoute={goToHash} />
+
+      {tour === 'main' && (
+        <Tour steps={MAIN_TOUR} onClose={closeTour} finishLabel="Create my first campaign" onFinish={() => openCampaign(null)} />
+      )}
+      {tour && tour !== 'main' && PAGE_HINTS[tour] && <Tour steps={[PAGE_HINTS[tour]]} onClose={closeTour} />}
     </div>
   )
 }

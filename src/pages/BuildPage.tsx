@@ -164,7 +164,7 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
               {job?.cancelRequested ? 'Stopping after this step…' : 'Stop'}
             </button>
           ) : (
-            <button className="btn-primary full-width" onClick={() => start()} disabled={!canBuild || !loaded}>
+            <button className="btn-primary full-width" onClick={() => start()} disabled={!canBuild || !loaded} data-tour="build-start">
               {mvp ? 'Re-plan and rebuild' : 'Plan & build MVP'}
             </button>
           )}

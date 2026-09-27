@@ -17,6 +17,7 @@ const ICONS: Record<string, ReactNode> = {
   support: <><path d="M4 13a8 8 0 0 1 16 0" /><rect x="3" y="13" width="4" height="6" rx="1.5" /><rect x="17" y="13" width="4" height="6" rx="1.5" /><path d="M20 19c0 1.5-2 2.5-5 2.5h-2" /></>,
   users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" /><path d="M18 14.8c1.9.7 3.1 2.4 3.5 5.2" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1" /></>,
+  tour: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" /></>,
   back: <><path d="M19 12H5" /><path d="m11 6-6 6 6 6" /></>,
   logout: <><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 16l-4-4 4-4" /><path d="M6 12h10" /></>,
 }
@@ -63,6 +64,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
       onClick={() => onNavigate(id)}
       className={`sidebar-item ${active === id ? 'active' : ''}`}
       aria-current={active === id ? 'page' : undefined}
+      data-tour={`nav-${id}`}
     >
       <Icon name={id} />
       {label}
@@ -97,6 +99,10 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
 
       <div className="sidebar-bottom-links">
         {runner && <div className="sidebar-runner">{runner}</div>}
+        <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('tour')} data-tour="take-tour">
+          <Icon name="tour" />
+          Take the tour
+        </button>
         <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('back')} disabled={!canGoBack}>
           <Icon name="back" />
           Back

@@ -54,6 +54,8 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
         setSession(s => (s ? { ...s, authenticated: true, user: res.user } : s))
       } else {
         const res = await signUp(username.trim(), password)
+        // New accounts get the guided tour and first-visit hints; existing users and the admin don't.
+        try { if (res.user) localStorage.setItem(`gapwise:onboarding:${res.user.username}`, '1') } catch { /* ignore */ }
         setSession(s => (s ? { ...s, authenticated: true, user: res.user } : s))
       }
     } catch (err: any) {

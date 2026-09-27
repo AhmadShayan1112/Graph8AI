@@ -109,6 +109,7 @@ const AnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onOpenCampaign, onN
             </select>
             <button
               className="btn-accent"
+              data-tour="analysis-run"
               onClick={refresh}
               disabled={!campaignId || refreshing || !canRefresh || !hasTarget}
               title={!canRefresh ? 'Lead search with Graph8 is turned off for your account' : ''}

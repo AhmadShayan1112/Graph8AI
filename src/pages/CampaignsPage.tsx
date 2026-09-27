@@ -59,7 +59,7 @@ const CampaignList: FC<{ onOpen: (id: string) => void }> = ({ onOpen }) => {
         </div>
         {!creating && (
           <div className="page-header-actions">
-            <button className="btn-primary" onClick={() => setCreating(true)}>+ New campaign</button>
+            <button className="btn-primary" onClick={() => setCreating(true)} data-tour="new-campaign">+ New campaign</button>
           </div>
         )}
       </header>

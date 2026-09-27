@@ -181,6 +181,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
             ) : (
               <button
                 className="btn-accent"
+                data-tour="gaps-run"
                 onClick={analyseAll}
                 disabled={!canRun || active || leads.length === analysed.length}
                 title={canRun ? '' : 'Gap analysis is turned off for your account'}
