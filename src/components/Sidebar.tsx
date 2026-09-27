@@ -68,10 +68,10 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
+      <button className="sidebar-brand brand-link" onClick={() => onNavigate('landing')} title="Go to the landing page">
         <LogoMark size={26} />
-        <div className="sidebar-name">Gapwise</div>
-      </div>
+        <span className="sidebar-name">Gapwise</span>
+      </button>
 
       <nav className="sidebar-nav">
         {GROUPS.map(g => (

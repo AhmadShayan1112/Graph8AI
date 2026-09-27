@@ -80,10 +80,10 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
       <aside className="auth-showcase">
         <img className="auth-photo" src="/images/signin-owner.jpg" alt="" decoding="async" />
         <div className="auth-shade" />
-        <div className="sidebar-brand auth-brand">
+        <a className="sidebar-brand auth-brand brand-link" href="/" title="Go to the landing page">
           <LogoMark size={30} />
-          <div className="sidebar-name">Gapwise</div>
-        </div>
+          <span className="sidebar-name">Gapwise</span>
+        </a>
 
         <div className="auth-showcase-body">
           <h1 className="auth-headline">
@@ -100,10 +100,10 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
 
       <main className="auth-panel">
         <form className="auth-card fade-in" onSubmit={submit} key={mode}>
-          <div className="sidebar-brand auth-brand-mobile">
+          <a className="sidebar-brand auth-brand-mobile brand-link" href="/" title="Go to the landing page">
             <LogoMark size={30} />
-            <div className="sidebar-name">Gapwise</div>
-          </div>
+            <span className="sidebar-name">Gapwise</span>
+          </a>
 
           {session && !session.passwordConfigured ? (
             <div className="settings-alert">

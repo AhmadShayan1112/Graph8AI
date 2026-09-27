@@ -179,6 +179,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   const handleNavigate = (id: string) => {
     if (id === 'back') { goBack(); return }
+    if (id === 'landing') { setMobileMenuOpen(false); onLanding(); return }
     if (id === 'logout') {
       try { sessionStorage.removeItem(SAVED) } catch { /* ignore */ }
       logout().finally(() => window.location.replace(window.location.pathname))
@@ -216,10 +217,10 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         >
           <span /><span /><span />
         </button>
-        <div className="sidebar-brand mobile-topbar-brand">
+        <button className="sidebar-brand mobile-topbar-brand brand-link" onClick={() => handleNavigate('landing')} title="Go to the landing page">
           <LogoMark size={26} />
-          <div className="sidebar-name">Gapwise</div>
-        </div>
+          <span className="sidebar-name">Gapwise</span>
+        </button>
         <span className="mobile-topbar-user">{user.username}</span>
       </header>
 
