@@ -52,6 +52,24 @@ const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOp
     { done: t!.gapAnalyses > 0, label: 'Run a gap analysis', hint: 'Research what each lead is missing', go: () => onNavigate('gaps') },
     { done: t!.sites > 0, label: 'Build and deploy an MVP', hint: 'Send the lead a working page', go: () => onNavigate('build') },
   ] : []
+  // Headline numbers, each with a line of context from data the dashboard already has.
+  const weekly = data?.charts?.weekly ?? []
+  const thisWeek = weekly[weekly.length - 1]?.count ?? 0
+  const mvpsBuilt = data?.charts?.funnel.find(f => f.stage === 'MVPs built')?.count ?? 0
+  const analysedPct = t && t.leads ? Math.round((t.gapAnalyses / t.leads) * 100) : 0
+  const metrics = t ? [
+    { label: 'Campaigns', value: t.campaigns, go: () => onNavigate('campaigns'), tone: 'blue', note: t.campaigns ? 'Open your campaigns' : 'Create your first one', good: false,
+      icon: <><path d="M5 21V4" /><path d="M5 4h12l-2.5 4L17 12H5" /></> },
+    { label: 'Saved leads', value: t.leads, go: () => onNavigate('campaigns'), tone: 'green', note: thisWeek ? `+${thisWeek} this week` : 'None added this week', good: thisWeek > 0,
+      icon: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M17 8v6M14 11h6" /></> },
+    { label: 'Searches run', value: t.searches, go: () => onNavigate('history'), tone: 'violet', note: 'See search history', good: false,
+      icon: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></> },
+    { label: 'Gap analyses', value: t.gapAnalyses, go: () => onNavigate('gaps'), tone: 'amber', note: t.leads ? `${analysedPct}% of leads analysed` : 'Analyse your leads', good: analysedPct >= 50,
+      icon: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="1.5" /></> },
+    { label: 'Sites live', value: t.sites, go: () => onNavigate('pipeline'), tone: 'rose', note: `${mvpsBuilt} MVP${mvpsBuilt === 1 ? '' : 's'} built`, good: false,
+      icon: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></> },
+  ] : []
+
   const doneCount = steps.filter(s => s.done).length
   const allDone = steps.length > 0 && doneCount === steps.length
 
@@ -77,7 +95,8 @@ const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOp
     <div className="page-content fade-in dash">
       <header className="page-header">
         <div className="page-header-text">
-          <h1 className="page-title">{greeting()}, {user.username}</h1>
+          <div className="dash-date">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <h1 className="page-title dash-title">{greeting()}, {user.username}</h1>
           <div className="page-subtitle">
             {!data ? 'Loading your pipeline…'
               : t!.campaigns === 0 ? 'Start with a campaign: choose who you want to sell to, then let Gapwise find them.'
@@ -94,146 +113,144 @@ const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOp
 
       {data && (
         <>
-          <section className="dash-stats" aria-label="Totals" data-tour="dash-stats">
-            {[
-              { label: 'Campaigns', value: t!.campaigns, go: () => onNavigate('campaigns') },
-              { label: 'Saved leads', value: t!.leads, go: () => onNavigate('campaigns') },
-              { label: 'Searches run', value: t!.searches, go: () => onNavigate('history') },
-              { label: 'Gap analyses', value: t!.gapAnalyses, go: () => onNavigate('gaps') },
-              { label: 'Sites live', value: t!.sites, go: () => onNavigate('pipeline') },
-            ].map(s => (
-              <button key={s.label} className="dash-stat" onClick={s.go}>
-                <span className="dash-stat-value">{s.value.toLocaleString()}</span>
-                <span className="dash-stat-label">{s.label}</span>
+          <section className="dash-metrics" aria-label="Totals" data-tour="dash-stats">
+            {metrics.map(m => (
+              <button key={m.label} className="dash-metric" onClick={m.go}>
+                <span className={`dash-metric-icon ${m.tone}`} aria-hidden>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{m.icon}</svg>
+                </span>
+                <span className="dash-metric-label">{m.label}</span>
+                <span className="dash-metric-value">{m.value.toLocaleString()}</span>
+                <span className={`dash-metric-note ${m.good ? 'good' : ''}`}>{m.note}</span>
               </button>
             ))}
           </section>
 
-          {data.charts && (data.temperature?.total ?? 0) > 0 && (
-            <ChartsPanel d={data} onOpenCampaign={onOpenCampaign} />
-          )}
-
-          {data.temperature && data.temperature.total > 0 && (
-            <TemperaturePanel t={data.temperature} onNavigate={onNavigate} onOpenGaps={onOpenGaps} />
-          )}
-
-          <div className="dash-grid">
-            <section className="dash-panel dash-prospects">
-              <div className="dash-panel-head">
-                <h2>Top prospects</h2>
-                <button className="dash-link" onClick={() => onNavigate('gaps')}>Gap analysis</button>
-              </div>
-              {data.topProspects.length ? (
-                <ul className="dash-list">
-                  {data.topProspects.map(p => (
-                    <li key={`${p.campaignId}-${p.leadId}`}>
-                      <button className="dash-row" onClick={() => onOpenGaps(p.campaignId)}>
-                        <span className={`gap-fit ${fitClass(p.fitScore)}`} title="Fit score">{p.fitScore}</span>
-                        <span className="dash-row-main">
-                          <span className="dash-row-title">{p.leadName}</span>
-                          <span className="dash-row-sub">{p.topGap || 'No major gap found'}{p.campaignName && ` · ${p.campaignName}`}</span>
-                        </span>
-                        <span className="dash-tag">{OFFER_LABEL[p.offer] ?? p.offer}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="dash-empty">
-                  <p>Prospects appear here once you run a gap analysis. Gapwise ranks them by how likely they are to buy.</p>
-                  <button className="btn-secondary" onClick={() => onNavigate('gaps')}>Open gap analysis</button>
-                </div>
+          <div className="dash-layout">
+            <div className="dash-main">
+              {data.charts && (data.temperature?.total ?? 0) > 0 && (
+                <ChartsPanel d={data} onOpenCampaign={onOpenCampaign} />
               )}
-            </section>
 
-            <section className="dash-panel dash-setup">
-              <div className="dash-panel-head">
-                <h2>{allDone ? 'You are all set' : 'Getting started'}</h2>
-                <span className="dash-count">{doneCount}/{steps.length}</span>
-              </div>
-              <div className="dash-meter" aria-hidden><span style={{ width: `${steps.length ? (doneCount / steps.length) * 100 : 0}%` }} /></div>
-              <ol className="dash-steps">
-                {steps.map(s => (
-                  <li key={s.label}>
-                    <button className={`dash-step ${s.done ? 'done' : ''}`} onClick={s.go}>
-                      <span className="dash-step-mark" aria-hidden>{s.done ? '✓' : ''}</span>
-                      <span className="dash-row-main">
-                        <span className="dash-row-title">{s.label}</span>
-                        {!s.done && <span className="dash-row-sub">{s.hint}</span>}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              {!isAdmin && (
-                <div className="dash-access">
-                  Your access:
-                  {(['graph8', 'gemini', 'claude'] as const).map(k => (
-                    <span key={k} className={`settings-badge ${user.permissions[k] ? 'ok' : ''}`}>
-                      {k === 'graph8' ? 'Graph8' : k === 'gemini' ? 'Gap analysis' : 'Claude'} {user.permissions[k] ? 'on' : 'off'}
-                    </span>
-                  ))}
-                </div>
+              {data.temperature && data.temperature.total > 0 && (
+                <TemperaturePanel t={data.temperature} onNavigate={onNavigate} onOpenGaps={onOpenGaps} />
               )}
-            </section>
-
-            <section className="dash-panel dash-campaigns">
-              <div className="dash-panel-head">
-                <h2>Campaigns</h2>
-                <button className="dash-link" onClick={() => onNavigate('campaigns')}>See all</button>
-              </div>
-              {data.campaigns.length ? (
-                <ul className="dash-list">
-                  {data.campaigns.map(c => {
-                    const target = [c.target.industries.join(', '), c.target.locations.map(l => l.value).join(', ')].filter(Boolean).join(' in ')
-                    return (
-                      <li key={c.id}>
-                        <button className="dash-row" onClick={() => onOpenCampaign(c.id)}>
+                <section className="dash-panel dash-prospects">
+                  <div className="dash-panel-head">
+                    <h2>Top prospects</h2>
+                    <button className="dash-link" onClick={() => onNavigate('gaps')}>Gap analysis</button>
+                  </div>
+                  {data.topProspects.length ? (
+                    <ul className="dash-list">
+                      {data.topProspects.map(p => (
+                        <li key={`${p.campaignId}-${p.leadId}`}>
+                          <button className="dash-row" onClick={() => onOpenGaps(p.campaignId)}>
+                            <span className={`gap-fit ${fitClass(p.fitScore)}`} title="Fit score">{p.fitScore}</span>
+                            <span className="dash-row-main">
+                              <span className="dash-row-title">{p.leadName}</span>
+                              <span className="dash-row-sub">{p.topGap || 'No major gap found'}{p.campaignName && ` · ${p.campaignName}`}</span>
+                            </span>
+                            <span className="dash-tag">{OFFER_LABEL[p.offer] ?? p.offer}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="dash-empty">
+                      <p>Prospects appear here once you run a gap analysis. Gapwise ranks them by how likely they are to buy.</p>
+                      <button className="btn-secondary" onClick={() => onNavigate('gaps')}>Open gap analysis</button>
+                    </div>
+                  )}
+                </section>
+                <section className="dash-panel dash-campaigns">
+                  <div className="dash-panel-head">
+                    <h2>Campaigns</h2>
+                    <button className="dash-link" onClick={() => onNavigate('campaigns')}>See all</button>
+                  </div>
+                  {data.campaigns.length ? (
+                    <ul className="dash-list">
+                      {data.campaigns.map(c => {
+                        const target = [c.target.industries.join(', '), c.target.locations.map(l => l.value).join(', ')].filter(Boolean).join(' in ')
+                        return (
+                          <li key={c.id}>
+                            <button className="dash-row" onClick={() => onOpenCampaign(c.id)}>
+                              <span className="dash-row-main">
+                                <span className="dash-row-title">{c.name}</span>
+                                <span className="dash-row-sub">{target || 'No target set'}{!c.mine && ` · ${c.username}`}</span>
+                              </span>
+                              <span className="dash-row-num">
+                                <strong>{c.leadCount}</strong> leads
+                                <span>{c.lastSearchAt ? ago(c.lastSearchAt) : 'no searches yet'}</span>
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="dash-empty">
+                      <p>No campaigns yet. A campaign groups your searches and saved leads for one goal, like “Dentists in Lahore”.</p>
+                      <button className="btn-primary" onClick={() => onOpenCampaign(null)}>Create a campaign</button>
+                    </div>
+                  )}
+                </section>
+            </div>
+            <aside className="dash-rail">
+                <section className="dash-panel dash-setup">
+                  <div className="dash-panel-head">
+                    <h2>{allDone ? 'You are all set' : 'Getting started'}</h2>
+                    <span className="dash-count">{doneCount}/{steps.length}</span>
+                  </div>
+                  <div className="dash-meter" aria-hidden><span style={{ width: `${steps.length ? (doneCount / steps.length) * 100 : 0}%` }} /></div>
+                  <ol className="dash-steps">
+                    {steps.map(s => (
+                      <li key={s.label}>
+                        <button className={`dash-step ${s.done ? 'done' : ''}`} onClick={s.go}>
+                          <span className="dash-step-mark" aria-hidden>{s.done ? '✓' : ''}</span>
                           <span className="dash-row-main">
-                            <span className="dash-row-title">{c.name}</span>
-                            <span className="dash-row-sub">{target || 'No target set'}{!c.mine && ` · ${c.username}`}</span>
-                          </span>
-                          <span className="dash-row-num">
-                            <strong>{c.leadCount}</strong> leads
-                            <span>{c.lastSearchAt ? ago(c.lastSearchAt) : 'no searches yet'}</span>
+                            <span className="dash-row-title">{s.label}</span>
+                            {!s.done && <span className="dash-row-sub">{s.hint}</span>}
                           </span>
                         </button>
                       </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <div className="dash-empty">
-                  <p>No campaigns yet. A campaign groups your searches and saved leads for one goal, like “Dentists in Lahore”.</p>
-                  <button className="btn-primary" onClick={() => onOpenCampaign(null)}>Create a campaign</button>
-                </div>
-              )}
-            </section>
-
-            <section className="dash-panel dash-activity">
-              <div className="dash-panel-head">
-                <h2>Recent activity</h2>
-                <button className="dash-link" onClick={() => onNavigate('history')}>History</button>
-              </div>
-              {activity.length ? (
-                <ul className="dash-timeline">
-                  {activity.map((a, i) => (
-                    <li key={i}>
-                      <button className="dash-event" onClick={a.open}>
-                        <span className={`dash-dot ${a.kind}`} aria-hidden />
-                        <span className="dash-row-main">
-                          <span className="dash-row-title">{a.kind === 'search' ? `Searched ${a.title}` : `Deployed ${a.title}`}</span>
-                          <span className="dash-row-sub">{a.detail}</span>
+                    ))}
+                  </ol>
+                  {!isAdmin && (
+                    <div className="dash-access">
+                      Your access:
+                      {(['graph8', 'gemini', 'claude'] as const).map(k => (
+                        <span key={k} className={`settings-badge ${user.permissions[k] ? 'ok' : ''}`}>
+                          {k === 'graph8' ? 'Graph8' : k === 'gemini' ? 'Gap analysis' : 'Claude'} {user.permissions[k] ? 'on' : 'off'}
                         </span>
-                        <span className="dash-when">{ago(a.at)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="dash-empty"><p>Searches and deployed sites will show up here.</p></div>
-              )}
-            </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
+                <section className="dash-panel dash-activity">
+                  <div className="dash-panel-head">
+                    <h2>Recent activity</h2>
+                    <button className="dash-link" onClick={() => onNavigate('history')}>History</button>
+                  </div>
+                  {activity.length ? (
+                    <ul className="dash-timeline">
+                      {activity.map((a, i) => (
+                        <li key={i}>
+                          <button className="dash-event" onClick={a.open}>
+                            <span className={`dash-dot ${a.kind}`} aria-hidden />
+                            <span className="dash-row-main">
+                              <span className="dash-row-title">{a.kind === 'search' ? `Searched ${a.title}` : `Deployed ${a.title}`}</span>
+                              <span className="dash-row-sub">{a.detail}</span>
+                            </span>
+                            <span className="dash-when">{ago(a.at)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="dash-empty"><p>Searches and deployed sites will show up here.</p></div>
+                  )}
+                </section>
+            </aside>
           </div>
         </>
       )}

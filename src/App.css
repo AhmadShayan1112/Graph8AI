@@ -2828,6 +2828,62 @@ body {
 @media (max-width: 600px) { .funnel li { grid-template-columns: 88px minmax(0, 1fr) 64px; } .donut-svg { width: 130px; height: 130px; } }
 @media (prefers-reduced-motion: reduce) { .funnel-track span { transition: none; } }
 
+/* ─── Dashboard redesign (scoped to .dash): warm neutrals, big numbers, main column + right rail ─── */
+.dash { --d-line: #E4E2DC; --d-ink: #252521; --d-body: #4D4D41; --d-muted: #7A766F; gap: 20px; }
+.dash-date { font-size: 13px; font-weight: 500; color: var(--d-muted); }
+.dash .dash-title { font-size: 32px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.1; color: var(--d-ink); }
+.dash .page-subtitle { font-size: 14.5px; color: var(--d-body); }
+.dash .page-header-actions .btn-primary, .dash .page-header-actions .btn-secondary { height: 40px; padding: 0 16px; border-radius: 8px; font-weight: 600; }
+.dash .page-header-actions .btn-primary { background: var(--d-ink); }
+.dash .page-header-actions .btn-primary:hover { background: #000; }
+.dash .page-header-actions .btn-secondary { border-color: var(--d-line); }
+
+.dash-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.dash-metric {
+  display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'icon label' 'value value' 'note note';
+  align-items: center; column-gap: 10px; row-gap: 6px; padding: 16px; text-align: left;
+  background: #fff; border: 1px solid var(--d-line); border-radius: 16px; font: inherit; color: inherit; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.dash-metric:hover { border-color: #CCC9C6; box-shadow: 0 10px 24px -18px rgba(37, 37, 33, 0.45); transform: translateY(-1px); }
+.dash-metric:focus-visible { outline: 2px solid #2C5DBD; outline-offset: 2px; }
+.dash-metric-icon { grid-area: icon; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; }
+.dash-metric-icon.blue { background: #EAF1FC; color: #2C5DBD; }
+.dash-metric-icon.green { background: #E6F5EC; color: #1B7A4E; }
+.dash-metric-icon.violet { background: #EFEDFB; color: #4a3aa7; }
+.dash-metric-icon.amber { background: #FCF3DE; color: #8A5A00; }
+.dash-metric-icon.rose { background: #FDECEC; color: #B4232A; }
+.dash-metric-label { grid-area: label; font-size: 13px; font-weight: 500; color: var(--d-body); }
+.dash-metric-value { grid-area: value; font-size: 30px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.1; color: var(--d-ink); margin-top: 4px; }
+.dash-metric-note { grid-area: note; font-size: 12.5px; color: var(--d-muted); }
+.dash-metric-note.good { color: #1B7A4E; font-weight: 500; }
+
+.dash-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.dash-main, .dash-rail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dash-rail { position: sticky; top: 16px; }
+.dash .dash-panel { border-radius: 16px; border-color: var(--d-line); padding: 20px; }
+.dash .dash-panel-head h2 { font-size: 16px; font-weight: 650; letter-spacing: -0.015em; color: var(--d-ink); }
+.dash .dash-row-sub { color: var(--d-muted); }
+.dash .dash-charts { gap: 16px; }
+.dash .dash-link { color: var(--d-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.dash .dash-meter span { background: #1B7A4E; }
+.dash-rail .dash-steps .dash-row-title { white-space: normal; }
+
+@media (max-width: 1280px) {
+  .dash .dash-charts { grid-template-columns: 1fr; }
+}
+@media (max-width: 1200px) {
+  .dash-layout { grid-template-columns: 1fr; }
+  .dash-rail { position: static; }
+  .dash-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .dash .dash-title { font-size: 26px; }
+  .dash-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-metric-value { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .dash-metric { transition: none; } .dash-metric:hover { transform: none; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {
