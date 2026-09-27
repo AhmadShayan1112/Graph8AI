@@ -283,3 +283,15 @@ export async function streamGeminiChat(
   }
   if (!wrote) throw new GeminiError('The assistant came back empty. Try asking again.', 502)
 }
+
+// A short piece of writing (no web search), e.g. an outreach email. Uses the same model order and retries.
+export async function askGemini(prompt: string) {
+  const { res } = await send('assistant', 'generateContent', {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.6, maxOutputTokens: 900 },
+  }, 60_000)
+  const data = await res.json()
+  const text = (data?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? '').join('').trim()
+  if (!text) throw new GeminiError('The writer came back empty. Try again.', 502, 'Empty answer.')
+  return text
+}

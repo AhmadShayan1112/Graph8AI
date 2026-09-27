@@ -1,7 +1,7 @@
 import { getDb } from './db.js'
 import { decrypt, encrypt } from './crypto.js'
 
-export type SecretName = 'graph8ApiKey' | 'claudeToken' | 'geminiApiKey'
+export type SecretName = 'graph8ApiKey' | 'claudeToken' | 'geminiApiKey' | 'resendApiKey'
 
 interface SettingsDoc {
   _id: 'app'
@@ -11,6 +11,11 @@ interface SettingsDoc {
   claudeTokenUpdatedAt?: Date
   geminiApiKey?: string
   geminiApiKeyUpdatedAt?: Date
+  // Email sending (Resend): the key is a secret; the sender details are plain settings.
+  resendApiKey?: string
+  resendApiKeyUpdatedAt?: Date
+  emailFrom?: string
+  emailReplyTo?: string
   // The admin's model order: try the first, then the next when one fails. Empty means automatic.
   geminiModels?: string[]
   // true: use only the listed models, never other ones the key offers.
@@ -48,7 +53,7 @@ async function readSecret(name: SecretName) {
 export async function secretStatus() {
   const doc = await (await settings()).findOne(
     { _id: 'app' },
-    { projection: { graph8ApiKeyUpdatedAt: 1, claudeTokenUpdatedAt: 1, geminiApiKeyUpdatedAt: 1, graph8ApiKey: 1, claudeToken: 1, geminiApiKey: 1 } },
+    { projection: { graph8ApiKeyUpdatedAt: 1, claudeTokenUpdatedAt: 1, geminiApiKeyUpdatedAt: 1, resendApiKeyUpdatedAt: 1, graph8ApiKey: 1, claudeToken: 1, geminiApiKey: 1, resendApiKey: 1 } },
   )
   return {
     graph8: {
@@ -58,6 +63,7 @@ export async function secretStatus() {
     },
     claude: { configured: !!doc?.claudeToken, updatedAt: doc?.claudeTokenUpdatedAt ?? null },
     gemini: { configured: !!doc?.geminiApiKey, updatedAt: doc?.geminiApiKeyUpdatedAt ?? null },
+    resend: { configured: !!doc?.resendApiKey, updatedAt: doc?.resendApiKeyUpdatedAt ?? null },
   }
 }
 
@@ -131,4 +137,19 @@ export async function setGeminiModel(choice: ModelChoice) {
     { upsert: true },
   )
   modelCache = null
+}
+
+// ── Email sending (Resend) ──
+export function getResendKey() {
+  return readSecret('resendApiKey')
+}
+
+export async function getEmailSettings() {
+  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { emailFrom: 1, emailReplyTo: 1, resendApiKey: 1 } })
+  return { from: doc?.emailFrom ?? '', replyTo: doc?.emailReplyTo ?? '', keyConfigured: !!doc?.resendApiKey }
+}
+
+export async function setEmailSettings(from: string, replyTo: string) {
+  await (await settings()).updateOne({ _id: 'app' }, { $set: { emailFrom: from, emailReplyTo: replyTo } }, { upsert: true })
+  return getEmailSettings()
 }

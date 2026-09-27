@@ -1,6 +1,6 @@
 import { useEffect, useState, type FC, type FormEvent } from 'react'
 import {
-  deleteSecret, getGeminiModels, getSettings, saveSecret, setGeminiModel, testGeminiKey,
+  deleteSecret, getEmailSettings, getGeminiModels, getSettings, saveEmailSettings, saveSecret, setGeminiModel, testGeminiKey,
   type GeminiModelOption, type SecretKind, type SettingsStatus,
 } from '../lib/api'
 import { confirmDialog } from '../components/Dialog'
@@ -17,6 +17,12 @@ const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder
     label: 'Graph8 API key',
     help: 'Used to discover and enrich leads.',
     placeholder: 'Paste your Graph8 API key',
+  },
+  {
+    kind: 'resend',
+    label: 'Resend API key (email sending)',
+    help: 'Sends outreach emails from Gapwise. Create a key at resend.com and verify your sending domain there.',
+    placeholder: 're_…',
   },
   {
     kind: 'gemini',
@@ -184,6 +190,7 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
       </div>
       {message && <div className={`settings-message ${message.ok ? 'ok' : 'bad'}`}>{message.text}</div>}
       {kind === 'gemini' && savedHere && <GeminiModelPicker />}
+      {kind === 'resend' && <EmailSender />}
       {checks && (
         <ul className="key-checks">
           {checks.map(c => (
@@ -324,5 +331,46 @@ const GeminiModelPicker: FC = () => {
       </div>
       {note && <div className={`settings-message ${note.ok ? 'ok' : 'bad'}`}>{note.text}</div>}
     </div>
+  )
+}
+
+// Who outreach emails come from. The address must be on a domain verified in Resend.
+const EmailSender: FC = () => {
+  const [from, setFrom] = useState('')
+  const [replyTo, setReplyTo] = useState('')
+  const [saved, setSaved] = useState({ from: '', replyTo: '' })
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    getEmailSettings().then(r => { setFrom(r.from); setReplyTo(r.replyTo); setSaved({ from: r.from, replyTo: r.replyTo }) }).catch(() => {})
+  }, [])
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setNote(null)
+    try {
+      const r = await saveEmailSettings(from, replyTo)
+      setSaved({ from: r.from, replyTo: r.replyTo })
+      setNote({ text: 'Saved.', ok: true })
+    } catch (err: any) {
+      setNote({ text: err.message, ok: false })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="model-picker" onSubmit={save}>
+      <div className="settings-card-label">Sender</div>
+      <div className="settings-card-row">
+        <input className="input settings-input" placeholder='From, e.g. Your Agency <hello@youragency.com>' value={from} onChange={e => setFrom(e.target.value)} />
+        <input className="input settings-input" placeholder="Reply-to (optional)" value={replyTo} onChange={e => setReplyTo(e.target.value)} />
+        <button className="btn-primary" type="submit" disabled={busy || (from === saved.from && replyTo === saved.replyTo)}>{busy ? 'Saving…' : 'Save sender'}</button>
+      </div>
+      <div className="settings-card-help">Replies go to the reply-to address if set, otherwise to the From address.</div>
+      {note && <div className={`settings-message ${note.ok ? 'ok' : 'bad'}`}>{note.text}</div>}
+    </form>
   )
 }

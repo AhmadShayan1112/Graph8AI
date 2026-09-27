@@ -1,4 +1,4 @@
-import type { Enrichment, Lead, MvpData, OutreachData } from '../types/lead'
+import type { Enrichment, Lead, MvpData } from '../types/lead'
 
 const BASE = '/api'
 
@@ -209,16 +209,6 @@ export const listJobs = <J extends Job = Job>(q: { kind?: 'mvp' | 'gaps'; leadId
 export const cancelJob = (id: string) => apiFetch<{ job: Job }>(`/jobs/${id}/cancel`, { method: 'POST' })
 export const resumeJob = (id: string) => apiFetch<{ job: Job }>(`/jobs/${id}/resume`, { method: 'POST' })
 
-export async function generateOutreach(
-  lead: Lead,
-  mvpType: string,
-  mvpUrl?: string
-): Promise<OutreachData> {
-  return apiFetch('/outreach/generate', {
-    method: 'POST',
-    body: JSON.stringify({ lead, mvpType, mvpUrl }),
-  })
-}
 
 export type Permission = 'claude' | 'graph8' | 'gemini'
 export type Permissions = Record<Permission, boolean>
@@ -240,12 +230,13 @@ export const signUp = (username: string, password: string) =>
   apiFetch<{ authenticated: boolean; user: SessionUser | null }>('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password }) })
 export const logout = () => apiFetch<{ authenticated: boolean }>('/auth/logout', { method: 'POST' })
 
-export type SecretKind = 'graph8' | 'claude' | 'gemini'
+export type SecretKind = 'graph8' | 'claude' | 'gemini' | 'resend'
 
 export interface SecretsStatus {
   graph8: { configured: boolean; source: 'settings' | 'env' | null; updatedAt: string | null }
   claude: { configured: boolean; updatedAt: string | null }
   gemini: { configured: boolean; updatedAt: string | null }
+  resend: { configured: boolean; updatedAt: string | null }
 }
 export interface SettingsStatus extends SecretsStatus {
   database: { connected: boolean; name: string }
@@ -544,3 +535,32 @@ export const getGeminiModels = () =>
 // `strict` uses only the listed models and never others.
 export const setGeminiModel = (models: string[], strict: boolean) =>
   apiFetch<{ order: string[]; strict: boolean }>('/settings-model/gemini', { method: 'PUT', body: JSON.stringify({ models, strict }) })
+
+// ── Outreach: one email per lead with its deployed MVP link, sent through the workspace's email service ──
+export interface OutreachEmail {
+  id: string
+  leadId: string
+  leadName: string
+  to: string
+  subject: string
+  body: string
+  siteUrl: string
+  status: 'draft' | 'sent' | 'failed'
+  error: string
+  createdAt: string
+  updatedAt: string
+  sentAt: string | null
+  username: string
+}
+export const getOutreach = (leadId: string) =>
+  apiFetch<{ emails: OutreachEmail[]; siteUrl: string | null; sending: { ready: boolean; from: string } }>(`/outreach?leadId=${encodeURIComponent(leadId)}`)
+export const draftOutreach = (lead: Lead, campaignId?: string) =>
+  apiFetch<{ email: OutreachEmail }>('/outreach/draft', { method: 'POST', body: JSON.stringify({ lead, campaignId }) })
+export const saveOutreach = (id: string, patch: { to?: string; subject?: string; body?: string }) =>
+  apiFetch<{ email: OutreachEmail }>(`/outreach/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+export const sendOutreach = (id: string) => apiFetch<{ email: OutreachEmail }>(`/outreach/${id}/send`, { method: 'POST' })
+
+export interface EmailSettings { from: string; replyTo: string; keyConfigured: boolean }
+export const getEmailSettings = () => apiFetch<EmailSettings>('/settings-email')
+export const saveEmailSettings = (from: string, replyTo: string) =>
+  apiFetch<EmailSettings>('/settings-email', { method: 'PUT', body: JSON.stringify({ from, replyTo }) })

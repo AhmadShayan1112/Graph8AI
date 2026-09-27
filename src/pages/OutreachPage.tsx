@@ -1,139 +1,200 @@
-import { useState, useEffect, type FC } from 'react'
-import type { Lead, OutreachData } from '../types/lead'
-import { generateOutreach } from '../lib/api'
+import { useEffect, useState, type FC } from 'react'
+import type { Lead } from '../types/lead'
+import { draftOutreach, getOutreach, saveOutreach, sendOutreach, type OutreachEmail } from '../lib/api'
+import { confirmDialog } from '../components/Dialog'
 
 interface Props {
   lead: Lead
-  mvpType: string
-  siteUrl?: string
+  // The campaign the lead came from, so the draft can use its gap analysis.
+  campaignId?: string
   onBack: () => void
+  onOpenBuild: () => void
 }
 
-const OutreachPage: FC<Props> = ({ lead, mvpType, siteUrl, onBack }) => {
-  const [outreach, setOutreach] = useState<OutreachData | null>(null)
-  const [selectedStep, setSelectedStep] = useState(0)
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
-  const previewUrl = siteUrl || `${lead.name.toLowerCase().replace(/\s+/g, '')}.gapwise.site`
+// One email to the lead that links to its deployed MVP: drafted by Gapwise, edited here, sent from the workspace.
+const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
+  const [loading, setLoading] = useState(true)
+  const [siteUrl, setSiteUrl] = useState<string | null>(null)
+  const [sending, setSending] = useState<{ ready: boolean; from: string }>({ ready: false, from: '' })
+  const [emails, setEmails] = useState<OutreachEmail[]>([])
+  const [draft, setDraft] = useState<OutreachEmail | null>(null)
+  const [form, setForm] = useState({ to: '', subject: '', body: '' })
+  const [busy, setBusy] = useState<'' | 'draft' | 'save' | 'send'>('')
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const load = () => getOutreach(String(lead.id)).then(r => {
+    setSiteUrl(r.siteUrl)
+    setSending(r.sending)
+    setEmails(r.emails)
+    const d = r.emails.find(e => e.status !== 'sent') ?? null
+    setDraft(d)
+    if (d) setForm({ to: d.to, subject: d.subject, body: d.body })
+  })
 
   useEffect(() => {
-    generateOutreach(lead, mvpType, previewUrl).then(setOutreach).catch(console.error)
-  }, [lead, mvpType, previewUrl])
+    setLoading(true)
+    load().catch(err => setMessage({ text: err.message, ok: false })).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id])
 
-  const handleSend = () => {
-    setSending(true)
-    setTimeout(() => {
-      setSending(false)
-      setSent(true)
-    }, 1500)
+  const dirty = !!draft && (form.to !== draft.to || form.subject !== draft.subject || form.body !== draft.body)
+  const sent = emails.filter(e => e.status === 'sent')
+  const linkMissing = !!siteUrl && !!form.body && !form.body.includes(siteUrl)
+
+  const write = async () => {
+    if (draft && (dirty || draft.body) && !(await confirmDialog({
+      title: 'Write a new draft?', message: 'The current draft will be replaced.', confirmLabel: 'Write new draft',
+    }))) return
+    setBusy('draft')
+    setMessage(null)
+    try {
+      const { email } = await draftOutreach(lead, campaignId)
+      setDraft(email)
+      setForm({ to: email.to, subject: email.subject, body: email.body })
+    } catch (err: any) {
+      setMessage({ text: err.message, ok: false })
+    } finally {
+      setBusy('')
+    }
   }
 
-  if (!outreach) return <div className="page-content"><span className="pulse">Generating outreach…</span></div>
+  const save = async () => {
+    if (!draft) return null
+    setBusy('save')
+    setMessage(null)
+    try {
+      const { email } = await saveOutreach(draft.id, form)
+      setDraft(email)
+      setMessage({ text: 'Draft saved.', ok: true })
+      return email
+    } catch (err: any) {
+      setMessage({ text: err.message, ok: false })
+      return null
+    } finally {
+      setBusy('')
+    }
+  }
 
-  const sequence = outreach.sequence || []
+  const send = async () => {
+    if (!draft) return
+    if (!(await confirmDialog({
+      title: `Send this email to ${form.to || 'the lead'}?`,
+      message: <>It goes out from <b>{sending.from}</b> with the link to {lead.name}’s MVP. You can’t unsend it.</>,
+      confirmLabel: 'Send email', tone: 'info',
+    }))) return
+    if (dirty && !(await save())) return
+    setBusy('send')
+    setMessage(null)
+    try {
+      await sendOutreach(draft.id)
+      setMessage({ text: `Sent to ${form.to}.`, ok: true })
+      setDraft(null)
+      setForm({ to: '', subject: '', body: '' })
+      await load()
+    } catch (err: any) {
+      setMessage({ text: err.message, ok: false })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`Subject: ${form.subject}\n\n${form.body}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* clipboard blocked */ }
+  }
+
+  const verified = lead.enrichment?.email.verified ? lead.enrichment.email.address : ''
 
   return (
     <div className="page-content fade-in">
       <header className="page-header">
         <div className="page-header-text">
           <button className="back-link" onClick={onBack}>← Back to build</button>
-          <div className="page-step">Outreach</div>
-          <h1 className="page-title">Send the working product, not a pitch</h1>
+          <h1 className="page-title">Email {lead.name}</h1>
+          <div className="page-subtitle">One email with the link to the MVP you built for them. Edit it, then send it from Gapwise.</div>
         </div>
-        <button
-          className={`btn-primary ${sent ? 'sent' : ''}`}
-          onClick={handleSend}
-          disabled={sending || sent || !lead.enrichment?.email.verified}
-          title={lead.enrichment?.email.verified ? undefined : 'Needs a verified email'}
-          style={{ background: sent ? '#22A06B' : undefined }}
-        >
-          {sent ? '✓ Sequence started' : sending ? 'Sending…' : 'Start sequence'}
-        </button>
       </header>
 
-      <div className="sequence-cards">
-        {sequence.map((q, i) => (
-          <button
-            key={i}
-            className={`sequence-card fade-in ${selectedStep === i ? 'active' : ''}`}
-            style={{ animationDelay: `${i * 0.06}s` }}
-            onClick={() => setSelectedStep(i)}
-          >
-            <span className="sequence-meta mono">{q.day} · {q.channel}</span>
-            <span className="sequence-title">{q.title}</span>
-            <span className="sequence-cond">{q.condition}</span>
-          </button>
-        ))}
-      </div>
+      {loading && <p className="text-muted"><span className="pulse">Loading…</span></p>}
 
-      <div className="outreach-grid">
-        <div className="email-preview">
-          <div className="email-field">
-            <div className="email-field-label">To</div>
-            <div className="email-field-value">
-              {lead.contact}{' '}
-              {lead.enrichment?.email.verified
-                ? <>&lt;{lead.enrichment.email.address}&gt;</>
-                : <span className="text-muted">— no verified email yet</span>}
-            </div>
-          </div>
-          <div className="email-field">
-            <div className="email-field-label">Subject</div>
-            <div className="email-field-value" style={{ fontWeight: 600 }}>{outreach.subject}</div>
-          </div>
-          <div className="email-body">
-            <p>{outreach.greeting}</p>
-            <p>
-              {outreach.body1} <span className="signal-highlight">{outreach.signal}</span>
-            </p>
-            <p>{outreach.body2}</p>
-            <div className="email-mvp-embed">
-              <div className="email-mvp-thumb">live MVP thumbnail</div>
-              <div className="email-mvp-link">
-                <span className="mono accent">{outreach.liveUrl}</span>
-                <span className="text-muted">Try it →</span>
-              </div>
-            </div>
-            <p>{outreach.body3}</p>
-            <p>— {lead.contact.split(' ')[0]}</p>
-          </div>
+      {!loading && !siteUrl && (
+        <div className="an-callout">
+          <div className="an-callout-title">Deploy the MVP first</div>
+          <div className="text-muted">The email is built around the live link to the solution you made for {lead.name}. Build and deploy it, then come back.</div>
+          <button className="btn-primary" onClick={onOpenBuild}>Go to Build & deploy</button>
         </div>
+      )}
 
-        <aside className="outreach-sidebar">
-          <div className="outreach-stat-card">
-            <div className="outreach-stat-label">Delivery confidence</div>
-            {lead.enrichment?.email.verified ? (
-              <>
-                <div className="outreach-stat-value" style={{ color: 'oklch(0.5 0.13 150)' }}>High</div>
-                <div className="outreach-stat-detail">Mailbox confirmed deliverable for {lead.enrichment.email.address}</div>
-              </>
+      {!loading && siteUrl && (
+        <div className="outreach-layout">
+          <section className="dash-panel outreach-compose" aria-label="Email draft">
+            <div className="outreach-link">
+              <span className="text-muted">MVP link</span>
+              <a href={siteUrl} target="_blank" rel="noopener noreferrer">{siteUrl}</a>
+            </div>
+
+            {!draft ? (
+              <div className="dash-empty">
+                <p>Gapwise writes a short, personal email from {lead.name}’s gap analysis, with the MVP link in it. You can edit everything before sending.</p>
+                <button className="btn-primary" onClick={write} disabled={busy === 'draft'}>{busy === 'draft' ? 'Writing…' : 'Write the email'}</button>
+              </div>
             ) : (
               <>
-                <div className="outreach-stat-value" style={{ color: 'oklch(0.55 0.15 28)' }}>Not deliverable</div>
-                <div className="outreach-stat-detail">
-                  {lead.enrichment?.email.checked.length
-                    ? `None of the ${lead.enrichment.email.checked.length} candidate emails passed verification. Call ${lead.enrichment.company?.phone || 'the business'} or message on LinkedIn.`
-                    : 'No email found for this contact. Use phone or LinkedIn.'}
+                <label className="outreach-field">
+                  <span>To</span>
+                  <input className="input" type="email" value={form.to} placeholder="owner@business.com" onChange={e => setForm(f => ({ ...f, to: e.target.value }))} />
+                </label>
+                {!form.to && (
+                  <div className="settings-message bad">
+                    {verified ? <>Suggested: <button className="dash-link" onClick={() => setForm(f => ({ ...f, to: verified }))}>{verified}</button></> : 'No verified email for this lead yet. Enrich it on Audit, or type the address.'}
+                  </div>
+                )}
+                <label className="outreach-field">
+                  <span>Subject</span>
+                  <input className="input" value={form.subject} maxLength={200} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} />
+                </label>
+                <label className="outreach-field">
+                  <span>Message</span>
+                  <textarea className="input outreach-body" rows={14} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} />
+                </label>
+                {linkMissing && <div className="settings-message bad">The MVP link is missing from the message. Add it back: {siteUrl}</div>}
+                {!sending.ready && (
+                  <div className="settings-alert">Sending isn’t set up yet: the admin adds the email service key and a From address in Settings. You can still copy the email.</div>
+                )}
+                <div className="outreach-actions">
+                  <button className="btn-secondary" onClick={write} disabled={!!busy}>{busy === 'draft' ? 'Writing…' : 'Rewrite'}</button>
+                  <button className="btn-secondary" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+                  <span className="outreach-spacer" />
+                  <button className="btn-secondary" onClick={save} disabled={!dirty || !!busy}>{busy === 'save' ? 'Saving…' : 'Save draft'}</button>
+                  <button className="btn-primary" onClick={send} disabled={!!busy || !sending.ready || !form.to.trim() || linkMissing}>
+                    {busy === 'send' ? 'Sending…' : 'Send email'}
+                  </button>
                 </div>
+                {sending.ready && <div className="outreach-from text-muted">Sends from {sending.from}</div>}
               </>
             )}
-          </div>
-          <div className="outreach-stat-card">
-            <div className="outreach-stat-label">Personalization score</div>
-            <div className="outreach-stat-value mono">9.2 / 10</div>
-            <div className="outreach-stat-detail">
-              Uses real business name, contact name, actual gap data, and a live working MVP
-            </div>
-          </div>
-          <div className="outreach-stat-card">
-            <div className="outreach-stat-label">Expected reply rate</div>
-            <div className="outreach-stat-value accent">32%</div>
-            <div className="outreach-stat-detail">
-              4× higher than generic outreach — leads with a working demo respond more
-            </div>
-          </div>
-        </aside>
-      </div>
+            {message && <div className={`settings-message ${message.ok ? 'ok' : 'bad'}`}>{message.text}</div>}
+          </section>
+
+          <aside className="dash-panel outreach-history" aria-label="Sent emails">
+            <div className="dash-panel-head"><h2>Sent to {lead.name}</h2></div>
+            {sent.length ? (
+              <ul className="outreach-sent">
+                {sent.map(e => (
+                  <li key={e.id}>
+                    <strong>{e.subject}</strong>
+                    <span>To {e.to} · {e.sentAt ? new Date(e.sentAt).toLocaleString() : ''}{e.username ? ` · by ${e.username}` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <div className="dash-empty"><p>Nothing sent yet.</p></div>}
+          </aside>
+        </div>
+      )}
     </div>
   )
 }

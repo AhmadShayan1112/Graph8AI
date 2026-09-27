@@ -18,7 +18,10 @@ import {
 } from './graph8.js'
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
 import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
-import { deleteSecret, getGeminiModel, getWorkspaceAccess, secretStatus, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
+import {
+  deleteSecret, getEmailSettings, getGeminiModel, getWorkspaceAccess, secretStatus, setEmailSettings, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName,
+} from './secrets.js'
+import { SendError, createDraft, deleteEmailsFor, emailsForLead, sendEmail, updateDraft, validEmail } from './outreach.js'
 import { loadPlan } from './mvpAgents.js'
 import {
   activeJobOf, cancelJob, countBuiltMvps, createJob, deleteJobsFor, getJob, keepAlive, listJobs, resumeJob, runStep, validRunSignature,
@@ -78,7 +81,7 @@ app.use(['/api/search', '/api/leads/discover', '/api/leads/enrich', '/api/g8'], 
 app.use('/api/mvp', requirePermission('claude'))
 
 // Secrets are write-only: the API accepts them but only ever reports whether they are set.
-const SECRET_ROUTES: Record<string, SecretName> = { graph8: 'graph8ApiKey', claude: 'claudeToken', gemini: 'geminiApiKey' }
+const SECRET_ROUTES: Record<string, SecretName> = { graph8: 'graph8ApiKey', claude: 'claudeToken', gemini: 'geminiApiKey', resend: 'resendApiKey' }
 
 app.get('/api/settings', async (_req, res) => {
   try {
@@ -222,7 +225,7 @@ app.patch('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
   try {
     if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
-    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id), deleteJobsFor(req.params.id)])
+    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id), deleteJobsFor(req.params.id), deleteEmailsFor(req.params.id)])
     res.json({ deleted: true })
   } catch (err: any) {
     console.error('[users] delete failed:', err.message)
@@ -1200,47 +1203,79 @@ async function serveSite(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-// Generate outreach email
-app.post('/api/outreach/generate', async (req, res) => {
+// Outreach: one email per lead with the deployed MVP's link, drafted here, edited by the person, sent via Resend.
+async function deployedUrlFor(req: Request, leadId: string) {
+  const site = await (await sites()).find({ leadId }, { projection: { _id: 1 } }).sort({ updatedAt: -1 }).limit(1).next()
+  return site ? `${originOf(req)}/${site._id}` : null
+}
+
+app.get('/api/outreach', async (req, res) => {
+  const auth = getAuth(res)
+  const leadId = String((req.query as Record<string, string>).leadId ?? '')
+  if (!leadId) { res.status(400).json({ error: 'leadId required' }); return }
   try {
-    const { lead, mvpType, mvpUrl } = req.body
-
-    const outreach = {
-      subject: `${lead.contact.split(' ')[0]}, I built something for ${lead.name}`,
-      greeting: `Hi ${lead.contact.split(' ')[0]},`,
-      body1: `I noticed ${lead.name} doesn't have an easy way for customers to`,
-      signal: lead.gaps[0]?.toLowerCase() || 'book online',
-      body2: `So I went ahead and built one — a working ${mvpType?.replace(/-/g, ' ') || 'booking page'} using your actual services and hours. It's live and ready for you to try:`,
-      liveUrl: mvpUrl || `${lead.name.toLowerCase().replace(/\s+/g, '')}.gapwise.site`,
-      body3: `No obligation — if it's useful, I'd love to help you take it further. If not, no worries at all.`,
-      signature: 'Best regards',
-      sequence: [
-        {
-          day: 'Day 0',
-          channel: 'Email',
-          title: 'MVP delivery',
-          condition: 'On send',
-        },
-        {
-          day: 'Day 3',
-          channel: 'Email',
-          title: 'Usage follow-up',
-          condition: 'If opened, not replied',
-        },
-        {
-          day: 'Day 7',
-          channel: 'LinkedIn',
-          title: 'Connection request',
-          condition: 'If no reply',
-        },
-      ],
-    }
-
-    res.json(outreach)
+    const [emails, siteUrl, email] = await Promise.all([emailsForLead(auth, leadId), deployedUrlFor(req, leadId), getEmailSettings()])
+    res.json({ emails, siteUrl, sending: { ready: email.keyConfigured && !!email.from, from: email.from } })
   } catch (err: any) {
-    console.error('Outreach error:', err)
-    res.status(500).json({ error: err.message })
+    console.error('[outreach] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load outreach for this lead.' })
   }
+})
+
+app.post('/api/outreach/draft', async (req, res) => {
+  const auth = getAuth(res)
+  const lead = req.body?.lead
+  if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
+  try {
+    const siteUrl = await deployedUrlFor(req, String(lead.id ?? lead.name))
+    if (!siteUrl) { res.status(400).json({ error: 'Deploy this lead’s MVP first. The email is built around its live link.' }); return }
+    let gap: Record<string, any> | null = null
+    const campaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : null
+    if (campaignId) {
+      const cid = await campaignIdFor(auth, campaignId).catch(() => null)
+      if (cid) gap = (await listGapAnalyses(cid).catch(() => [])).find(g => g.leadId === String(lead.id))?.result ?? null
+    }
+    res.json({ email: await createDraft(auth, { lead, gap, siteUrl, campaignId }) })
+  } catch (err: any) {
+    console.error('[outreach] draft failed:', err.message)
+    res.status(503).json({ error: 'Could not write the draft. Try again shortly.' })
+  }
+})
+
+app.put('/api/outreach/:id', async (req, res) => {
+  const to = req.body?.to
+  if (typeof to === 'string' && to.trim() && !validEmail(to.trim())) { res.status(400).json({ error: 'That email address does not look right.' }); return }
+  try {
+    const email = await updateDraft(getAuth(res), req.params.id, { to: req.body?.to, subject: req.body?.subject, body: req.body?.body })
+    if (!email) { res.status(404).json({ error: 'Draft not found (it may already have been sent).' }); return }
+    res.json({ email })
+  } catch (err: any) {
+    console.error('[outreach] save failed:', err.message)
+    res.status(503).json({ error: 'Could not save the draft.' })
+  }
+})
+
+app.post('/api/outreach/:id/send', async (req, res) => {
+  try {
+    res.json({ email: await sendEmail(getAuth(res), req.params.id) })
+  } catch (err: any) {
+    if (err instanceof SendError) { res.status(err.status).json({ error: err.message }); return }
+    console.error('[outreach] send failed:', err.message)
+    res.status(503).json({ error: 'Could not send the email. Try again shortly.' })
+  }
+})
+
+// Admin: who outreach emails come from.
+app.get('/api/settings-email', requireAdmin, async (_req, res) => {
+  try { res.json(await getEmailSettings()) } catch (err: any) { res.status(503).json({ error: settingsError(err) }) }
+})
+app.put('/api/settings-email', requireAdmin, async (req, res) => {
+  const from = typeof req.body?.from === 'string' ? req.body.from.trim().slice(0, 200) : ''
+  const replyTo = typeof req.body?.replyTo === 'string' ? req.body.replyTo.trim().slice(0, 200) : ''
+  const addr = (v: string) => (v.match(/<([^>]+)>/)?.[1] ?? v).trim()
+  if (from && !validEmail(addr(from))) { res.status(400).json({ error: 'Use a From address like "Your Agency <hello@youragency.com>".' }); return }
+  if (replyTo && !validEmail(addr(replyTo))) { res.status(400).json({ error: 'The reply-to address does not look right.' }); return }
+  try { res.json(await setEmailSettings(from, replyTo)) } catch (err: any) { res.status(503).json({ error: settingsError(err) }) }
 })
 
 // List Graph8 contacts directly

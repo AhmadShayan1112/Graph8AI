@@ -103,8 +103,12 @@ press **Plan & build MVP** (about 3-6 minutes). **Rebuild with this plan** rerun
 uses that lead's analysis, so run gap analysis first for the best result.
 
 ## Outreach  [#/outreach]
-Generates an outreach email that links to the deployed MVP, plus a follow-up sequence (day 0 email, day 3
-follow-up, day 7 LinkedIn).
+One email per lead that links to its deployed MVP (deploy the MVP first). **Write the email** drafts a short,
+personal email from the lead's gap analysis with the MVP link in it; edit To, Subject and Message, **Save draft**,
+**Rewrite** or **Copy**, then **Send email** to send it from Gapwise. The link must stay in the message. Sent emails
+are listed per lead. There are no automatic follow-up sequences. Sending needs the admin to set up email in
+Settings; each person can send up to 100 emails a day. Every email ends with a line telling the recipient how to
+opt out.
 
 ## Pipeline  [#/pipeline]
 Every deployed MVP site with its public link.
@@ -144,6 +148,8 @@ Keys are encrypted before they are stored and never sent back to the browser (on
 - Claude Code OAuth token (for building MVPs; create with "claude setup-token", or use an Anthropic API key).
 - Graph8 API key (lead search and enrichment; can also come from the server environment).
 - Gemini API key (powers gap analysis and this assistant; create one in Google AI Studio).
+- Resend API key (email sending) plus the Sender: a From address on a domain verified in Resend, and an optional
+  reply-to. Needed to send outreach emails from Gapwise.
 Replace or Delete a key at any time; Delete takes effect immediately.
 `
 
@@ -282,7 +288,7 @@ How it works:
 5. Audit: company details, the decision maker and a verified email address.
 6. Build & deploy: AI builds a working page for that business (booking page, lead-capture form, mobile-first
    landing page or fast landing page) in a few minutes, published at a shareable link.
-7. Outreach: an email that links to the live page, plus a follow-up plan.
+7. Outreach: one personal email with the live link to the page, sent straight from Gapwise.
 There is also a dashboard, search history, a built-in assistant and human support inside the app.
 
 Getting started: press **Sign in** on this page, then **Sign up** to create an account; you are signed in right

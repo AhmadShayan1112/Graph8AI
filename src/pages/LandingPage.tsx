@@ -21,7 +21,7 @@ const HOW_STEPS = [
   { n: '01', t: 'Identify', d: 'Define a market by region and industry. Gapwise scores each business on digital maturity and surfaces addressable gaps.' },
   { n: '02', t: 'Assess', d: 'Over 70 checks across performance, search, security, conversion and local presence, each supported by evidence.' },
   { n: '03', t: 'Build', d: 'Select a solution from the library. It adopts the prospect\'s branding and content and deploys to a private, secure URL.' },
-  { n: '04', t: 'Engage', d: 'Deliver the working solution with a structured follow-up sequence, and receive notification when the prospect reviews it.' },
+  { n: '04', t: 'Engage', d: 'Send one personal email with the live link to the working solution, straight from Gapwise.' },
 ]
 
 const AUDIT_CATEGORIES = [

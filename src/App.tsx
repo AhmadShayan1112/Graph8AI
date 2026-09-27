@@ -247,7 +247,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
     { target: 'nav-analysis', prepare: inMenu, title: 'Size the market', body: <>See how many businesses match your campaign, how many have no website, and where the best opportunity is.</> },
     { target: 'nav-audit', prepare: inMenu, title: '4. Audit a lead', body: <>Open any lead to see its scores, the decision maker and a verified email. Export it as a PDF report.</> },
     { target: 'nav-build', prepare: inMenu, title: '5. Build the MVP', body: <>Four agents research, plan, design and build a working web solution for the lead. It keeps running even if you leave the page.</> },
-    { target: 'nav-outreach', prepare: inMenu, title: '6. Send it', body: <>Write the outreach email with the live link to the MVP, plus a follow-up plan.</> },
+    { target: 'nav-outreach', prepare: inMenu, title: '6. Send it', body: <>Gapwise drafts one email with the live link to the MVP. Edit it and send it straight from Gapwise.</> },
     { target: 'dash-stats', prepare: () => { outOfMenu(); setPage('dashboard') }, title: 'Track your progress', body: <>The Dashboard shows your totals, hot, warm and cold leads, and what to do next.</> },
     { target: 'assistant', prepare: outOfMenu, title: 'Help is one click away', body: <>Ask the assistant how to do anything, or choose <b>Talk to a person</b> to reach the team.</> },
     { target: 'take-tour', prepare: inMenu, title: 'You are ready', body: <>Replay this tour any time from here. Start by creating your first campaign.</> },
@@ -423,9 +423,9 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         {page === 'outreach' && selectedLead && (
           <OutreachPage
             lead={selectedLead}
-            mvpType={mvpType}
-            siteUrl={siteUrl}
+            campaignId={activeCampaign?.id}
             onBack={() => setPage('build')}
+            onOpenBuild={() => setPage('build')}
           />
         )}
         {page === 'pipeline' && <SitesPage />}

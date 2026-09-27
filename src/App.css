@@ -2896,6 +2896,22 @@ body {
 .module-list li.active .module-mark { background: #2C5DBD; animation: pulse 1.4s infinite; }
 @media (prefers-reduced-motion: reduce) { .module-list li.active .module-mark { animation: none; } }
 
+/* ─── Outreach email ─── */
+.outreach-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.outreach-compose { gap: 14px; }
+.outreach-link { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #EEF2FC; font-size: 13.5px; }
+.outreach-link a { color: #2C5DBD; font-weight: 600; word-break: break-all; }
+.outreach-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+.outreach-field .input { width: 100%; }
+.outreach-body { height: auto; min-height: 280px; padding: 12px; line-height: 1.55; font: inherit; font-size: 14px; resize: vertical; }
+.outreach-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.outreach-spacer { flex: 1; }
+.outreach-from { font-size: 12.5px; }
+.outreach-sent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.outreach-sent li { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid #F1F1EE; font-size: 13px; }
+.outreach-sent span { color: #6B7080; font-size: 12px; }
+@media (max-width: 1000px) { .outreach-layout { grid-template-columns: 1fr; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {
