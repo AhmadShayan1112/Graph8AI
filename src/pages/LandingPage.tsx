@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react'
 import { LogoMark } from '../components/Logo'
+import SolutionPreview from '../components/SolutionPreview'
 
 interface Props {
   onEnterApp: () => void
@@ -32,12 +33,12 @@ const AUDIT_CATEGORIES = [
 ]
 
 const MVP_SOLUTIONS = [
-  { t: 'Booking page', d: "Online scheduling configured with the business's services, hours and insurance options, including automated SMS reminders.", fix: 'no booking', ph: 'booking page preview' },
-  { t: 'Fast landing page', d: 'A mobile-first rebuild with structured data, verified reviews and a clear primary conversion path.', fix: 'speed · SEO', ph: 'landing page preview' },
-  { t: 'Online menu & ordering', d: 'Replaces static PDF menus with a responsive menu and online ordering for pickup.', fix: 'PDF-only menu', ph: 'ordering preview' },
-  { t: 'Quote calculator', d: 'Instant, rules-based estimates that capture qualified leads for trade and service businesses.', fix: 'no lead capture', ph: 'quote calculator preview' },
-  { t: 'Reviews widget', d: 'Displays verified Google reviews on any page and simplifies new review requests.', fix: 'weak trust', ph: 'reviews widget preview' },
-  { t: 'FAQ assistant', d: 'Responds to common enquiries around the clock and routes qualified visitors to booking.', fix: 'after-hours leads', ph: 'assistant preview' },
+  { t: 'Booking page', d: "Online scheduling configured with the business's services, hours and insurance options, including automated SMS reminders.", fix: 'no booking' },
+  { t: 'Fast landing page', d: 'A mobile-first rebuild with structured data, verified reviews and a clear primary conversion path.', fix: 'speed · SEO' },
+  { t: 'Online menu & ordering', d: 'Replaces static PDF menus with a responsive menu and online ordering for pickup.', fix: 'PDF-only menu' },
+  { t: 'Quote calculator', d: 'Instant, rules-based estimates that capture qualified leads for trade and service businesses.', fix: 'no lead capture' },
+  { t: 'Reviews widget', d: 'Displays verified Google reviews on any page and simplifies new review requests.', fix: 'weak trust' },
+  { t: 'FAQ assistant', d: 'Responds to common enquiries around the clock and routes qualified visitors to booking.', fix: 'after-hours leads' },
 ]
 
 const LandingPage: FC<Props> = ({ onEnterApp }) => {
@@ -411,7 +412,7 @@ const LandingPage: FC<Props> = ({ onEnterApp }) => {
               ))}
             </div>
             <div className="landing-solution-preview">
-              <div className="landing-solution-thumb">{MVP_SOLUTIONS[selectedMvp].ph}</div>
+              <SolutionPreview name={MVP_SOLUTIONS[selectedMvp].t} />
               <p className="landing-solution-desc">{MVP_SOLUTIONS[selectedMvp].d}</p>
             </div>
           </div>
