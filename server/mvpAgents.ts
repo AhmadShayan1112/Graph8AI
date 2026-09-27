@@ -125,11 +125,13 @@ Rules for the solution:
 ${types}
 ${preference && SOLUTION_TYPES[preference] ? `- The user prefers "${preference}"; use it unless it clearly would not fix the top gap, and say why in whyItWillClick.` : ''}
 - Design the full user flow: every screen or step the customer goes through, what they do and what they see.
-- It is a multi-module web app, not a landing page. Plan 4 to 6 modules (each is a page of the app with its own route):
-  the first is always "home"; one is the core module that fixes the top gap (e.g. online booking, ordering, quote);
-  add the modules this business needs around it (e.g. services & prices, my appointments / order tracking, reviews,
-  FAQ & contact) and, where it fits, an owner-side module (e.g. a clinic or kitchen dashboard that lists the bookings
-  or orders customers made). Modules share one data store, so what a customer does in one shows up in the others.
+- It is a real multi-module web product, not a landing page. Plan 5 to 7 modules (each a page with its own route):
+  "home" first, then "account" (customer sign up, log in, log out and profile), then the core module that fixes the top
+  gap (e.g. online booking, ordering, quote), then the modules this business needs around it (e.g. services & prices,
+  my appointments / my orders for logged-in customers, reviews, FAQ & contact) and, where it fits, an owner-side module
+  (e.g. a clinic or kitchen dashboard listing the bookings or orders customers made) behind an owner login.
+- Give every module an access level: "public", "customer" (needs a customer login) or "owner" (needs the owner login).
+  Modules share one data store, so what a customer does in one shows up in the others and in the owner's module.
 - Every interaction must be buildable in plain HTML/CSS/JS in one file (multi-step forms, date and time pickers, carts,
   calculators, filters, accordions, chat-style FAQ, lists and dashboards). Nothing needs a server.
 
@@ -155,7 +157,7 @@ Reply with ONLY this JSON:
 {
   "solution": { "type": "one id from the list", "title": "", "promise": "one sentence for the owner", "whyItWillClick": "why this lead will want it, tied to their gaps", "fixesGaps": [""] },
   "flow": [{ "step": 1, "screen": "", "userAction": "", "systemResponse": "" }],
-  "modules": [{ "id": "home | short-kebab-id", "name": "shown in the app's menu", "purpose": "", "features": ["exactly what it does"], "data": "what it reads or writes in the shared store" }],
+  "modules": [{ "id": "home | account | short-kebab-id", "name": "shown in the app's menu", "access": "public | customer | owner", "purpose": "", "features": ["exactly what it does"], "data": "what it reads or writes in the shared store" }],
   "sections": [{ "id": "", "name": "", "purpose": "", "content": "what goes in it, with real details from the data" }],
   "interactions": [{ "name": "", "behaviour": "exactly how it works" }],
   "cta": { "primary": "", "secondary": "" },
@@ -179,18 +181,25 @@ Reply with ONLY this JSON:
 }
 
 // Home first, then up to five more, with safe ids for routes.
-export function normalizeModules(raw: unknown) {
-  const list = (Array.isArray(raw) ? raw : []).map((m: any) => ({
+// Home and Account first (the shell builds both), then up to five more, with safe route ids and access levels.
+export function normalizeModules(raw: unknown): MvpModule[] {
+  const access = (v: unknown): MvpModule['access'] => (v === 'customer' || v === 'owner' ? v : 'public')
+  const list: MvpModule[] = (Array.isArray(raw) ? raw : []).map((m: any) => ({
     id: String(m?.id ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30),
     name: String(m?.name ?? '').slice(0, 40),
+    access: access(m?.access),
     purpose: String(m?.purpose ?? '').slice(0, 300),
     features: (Array.isArray(m?.features) ? m.features : []).map((f: unknown) => String(f).slice(0, 200)).slice(0, 8),
     data: String(m?.data ?? '').slice(0, 300),
   })).filter(m => m.id && m.name)
   const seen = new Set<string>()
   const unique = list.filter(m => !seen.has(m.id) && !!seen.add(m.id))
-  const home = unique.find(m => m.id === 'home') ?? { id: 'home', name: 'Home', purpose: 'Introduce the business and lead into the core module.', features: [], data: '' }
-  return [home, ...unique.filter(m => m.id !== 'home')].slice(0, 6)
+  const home: MvpModule = unique.find(m => m.id === 'home') ?? { id: 'home', name: 'Home', access: 'public', purpose: 'Introduce the business and lead into the core module.', features: [], data: '' }
+  const account: MvpModule = unique.find(m => m.id === 'account') ?? {
+    id: 'account', name: 'Log in', access: 'public', purpose: 'Customer sign up, log in, log out and profile.',
+    features: ['Sign up with name, email and password', 'Log in and log out', 'Profile with the customer\'s details and activity'], data: 'users, session',
+  }
+  return [{ ...home, access: 'public' }, { ...account, access: 'public' }, ...unique.filter(m => m.id !== 'home' && m.id !== 'account')].slice(0, 7)
 }
 
 // ── 4. Builder ──
@@ -205,6 +214,13 @@ Architecture (keep it consistent across edits):
 - One shared store, window.AppStore, with get(key), set(key, value) and subscribe(fn): it keeps data in memory and also
   tries localStorage inside try/catch (the app may run in a sandbox where localStorage throws). Modules read and write
   it so they stay in sync (e.g. a booking made in one module appears in another).
+- Accounts, window.AppAuth: signUp({ name, email, password }), logIn(email, password), logOut(), currentUser(), and
+  ownerLogIn(email, password), with users and the session kept in AppStore. Validate inputs and show clear errors. Seed
+  one demo owner account and show its email and password on the owner login screen. Say on the login screens that
+  this is a demo prototype. (Hash passwords with a simple SHA-256 via crypto.subtle when available.)
+- Access: each module section has data-access="public|customer|owner". The router sends a signed-out visitor who opens a
+  customer or owner module to the right login, then back to where they were. The header shows "Log in" when signed
+  out, and the user's name with a menu (profile, log out) when signed in; owner-only links appear for the owner.
 Quality bar: it must look like a premium, professionally designed product for this specific business, every module must
 work end to end (forms validate and end in a clear confirmation; lists update), mobile first, accessible (semantic
 landmarks, labels, focus states, contrast) and fast.
@@ -232,7 +248,7 @@ ${JSON.stringify(imageList, null, 2)}
 </images>`
 }
 
-export type MvpModule = { id: string; name: string; purpose: string; features: string[]; data: string }
+export type MvpModule = { id: string; name: string; access: 'public' | 'customer' | 'owner'; purpose: string; features: string[]; data: string }
 
 // Step 1 of the build: the app shell and the Home module; every other module gets a placeholder section.
 export async function buildShell(doc: PlanDoc, onActivity: (a: AgentActivity) => void) {
@@ -247,13 +263,15 @@ export async function buildShell(doc: PlanDoc, onActivity: (a: AgentActivity) =>
 
 Work in the current folder:
 1. Write index.html with the Write tool: the full design system from the plan (palette, fonts, spacing, components), the
-   header and menu for ALL modules (${modules.map(m => `${m.name} → #/${m.id}`).join(', ')}), the hash router, window.AppStore,
-   the footer ("Prototype prepared for ${doc.leadName}"), and the Home module built completely: the hero with the plan's
-   headline and a photo, the industry animations, and clear links into the core module.
-2. For every other module add only <section class="module" data-route="ID"> with its title and a short "This part is being
-   built" note; later steps will build them.
-3. Read index.html back, check the router, menu and Home work and reduced motion is respected, and fix issues with small
-   Edit calls. Then stop. Do not create other files.
+   header and menu for ALL modules (${modules.map(m => `${m.name} → #/${m.id} [${m.access}]`).join(', ')}), the hash router with
+   access control, window.AppStore, window.AppAuth, the footer ("Prototype prepared for ${doc.leadName}"), and two modules
+   built completely:
+   - Home: the hero with the plan's headline and a photo, the industry animations, and clear links into the core module.
+   - Account (#/account): sign up, log in (customer and owner tabs), log out and a profile view, fully working.
+2. For every other module add only <section class="module" data-route="ID" data-access="LEVEL"> with its title and a short
+   "This part is being built" note; later steps will build them.
+3. Read index.html back, check the router, access control, sign up / log in / log out, menu and Home all work and reduced
+   motion is respected, and fix issues with small Edit calls. Then stop. Do not create other files.
 
 ${dataBlocks(doc)}`,
   })
@@ -275,10 +293,12 @@ Module spec:
 ${JSON.stringify(module, null, 2)}
 
 Work like this:
-1. Read index.html to learn its design system, router and window.AppStore.
+1. Read index.html to learn its design system, router, window.AppStore and window.AppAuth.
 2. Replace the placeholder <section class="module" data-route="${module.id}"> with the complete, working module, using Edit.
    Add its CSS and JS next to the existing ones. Reuse the existing components and styles; match the design exactly.
    Read and write the shared store so this module connects to the others (${module.data || 'as the plan describes'}).
+   Its access level is "${module.access}": keep data-access="${module.access}" on the section. Use AppAuth.currentUser() to tie
+   what the customer does to their account (e.g. their bookings), and show owner-only controls only to the owner.
 3. Read the result back, make sure the other modules and the router still work, and fix issues with small edits. Stop.
 Do not rewrite the whole file and do not create other files.
 

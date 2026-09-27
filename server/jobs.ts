@@ -320,7 +320,8 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
     if (!auth.permissions.claude) throw Object.assign(new Error('MVP generation with Claude is turned off for this account.'), { status: 403 })
     const doc = await loadPlanById(String(s.planId ?? job.input.planId ?? ''))
     if (!doc) throw Object.assign(new Error('The plan for this build has expired. Plan the MVP again.'), { status: 400 })
-    const modules = doc.plan.modules?.length ? doc.plan.modules : normalizeModules(undefined)
+    // Always normalised, so older plans also get Home and Account first (the shell builds both).
+    const modules = normalizeModules(doc.plan.modules)
     doc.plan.modules = modules
     const moduleStatus = (doneThrough: number, active: number | null) =>
       modules.map((m: any, i: number) => ({ id: m.id, name: m.name, status: i <= doneThrough ? 'done' : i === active ? 'active' : 'waiting' }))
@@ -332,11 +333,13 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
     if (job.step === 'build' || job.step === 'shell') {
       await patch(job._id, {
         'state.agents.build': 'active', 'state.buildStartedAt': s.buildStartedAt ?? new Date(),
-        'state.modules': moduleStatus(-1, 0), 'state.build': { chars: 0, action: 'Starting', module: 'App shell and Home' },
+        'state.modules': modules.map((m: any, i: number) => ({ id: m.id, name: m.name, status: i <= 1 ? 'active' : 'waiting' })),
+        'state.build': { chars: 0, action: 'Starting', module: 'App shell, Home and accounts' },
       })
-      const html = await buildShell(doc, progress('App shell and Home'))
-      await (await jobs()).updateOne({ _id: job._id }, { $set: { workingHtml: html, 'state.modules': moduleStatus(0, modules.length > 1 ? 1 : null), updatedAt: new Date() } })
-      return modules.length > 1 ? 'module:1' : 'finish'
+      // The shell builds Home and Account (modules 0 and 1); the rest follow one per step.
+      const html = await buildShell(doc, progress('App shell, Home and accounts'))
+      await (await jobs()).updateOne({ _id: job._id }, { $set: { workingHtml: html, 'state.modules': moduleStatus(1, modules.length > 2 ? 2 : null), updatedAt: new Date() } })
+      return modules.length > 2 ? 'module:2' : 'finish'
     }
 
     if (job.step.startsWith('module:')) {
