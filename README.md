@@ -83,13 +83,37 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 
 ## Background jobs
 
-MVP builds and gap-analysis runs are server-side jobs (`jobs` collection, `server/jobs.ts`), so they keep running
+MVP builds, gap-analysis runs and security audits are server-side jobs (`jobs` collection, `server/jobs.ts`), so they keep running
 when the user switches pages, refreshes or closes the tab. Each job moves through steps (MVP: research → plan →
 build; gap analysis: one lead per step). A step runs in its own function call, kept alive after the response with
 Vercel's `waitUntil`, then hands the job to a fresh call through a signed internal route
 (`/api/internal/jobs/:id/run`), so no call exceeds the 5-minute limit. A lock prevents a step from running twice;
 a job whose step went quiet is restarted the next time anyone views their jobs. Failed steps are retried (usage
 limits are waited out); a job that still fails can be resumed. Pages only watch jobs (`/api/jobs`).
+
+## Security audit
+
+**Security audit** (Prospect menu, needs Claude access) reviews a lead's web products and produces a PDF report
+to send them (`server/security.ts`, `server/securityScan.ts`, `server/securityReport.ts`, `security_audits`
+collection, one audit per lead and person).
+
+- **Products:** the lead's website is added first. **Find products with Claude** runs Claude with web search to
+  find the company's other web products (apps, portals, stores, booking systems). The person ticks which to audit,
+  and can edit, remove or add addresses (up to 10). Products on another domain are flagged for confirmation.
+- **Passive review only:** for each product the server reads what any visitor's browser receives: TLS certificate
+  and protocol versions, HTTP→HTTPS redirect, security headers (HSTS, CSP, X-Frame-Options, …), cookie flags,
+  visible software versions, mixed content, third-party scripts, plus public DNS (SPF, DMARC, CAA) and
+  `/.well-known/security.txt`. Nothing is probed, guessed, brute-forced or submitted. Requests go only to public
+  addresses (private and local addresses are refused at every redirect hop), with short timeouts.
+- **Findings** come from fixed rules over that data, so every finding is grounded in something observed. Claude
+  then rewrites the risk and fix for a business owner, may add at most two findings backed by the scan data, and
+  writes the executive summary. If Claude is unavailable the plain write-up is used. Score: 100 minus points per
+  finding by severity.
+- **Report:** a PDF (pdf-lib, standard fonts) with a cover summary and one section per product; served at
+  `/api/security/:id/report.pdf`.
+- **Sharing:** Outreach has a **Security report** tab; Claude drafts the email and Resend sends it with the PDF
+  attached.
+- The audit runs as a background job (`kind: 'security'`): one product per step, then the report.
 
 ## Assistant and human support
 

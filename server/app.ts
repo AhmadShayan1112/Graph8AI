@@ -21,7 +21,12 @@ import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, s
 import {
   deleteSecret, getEmailSettings, getGeminiModel, getWorkspaceAccess, secretStatus, setEmailSettings, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName,
 } from './secrets.js'
-import { SendError, createDraft, deleteEmailsFor, emailsForLead, sendEmail, updateDraft, validEmail } from './outreach.js'
+import { SendError, createDraft, createSecurityDraft, deleteEmailsFor, emailsForLead, sendEmail, updateDraft, validEmail } from './outreach.js'
+import {
+  auditFor, auditJobStart, auditPdf, deleteAuditsFor, getAudit, getAuditById, publicAudit, resetSelected, saveProducts,
+} from './security.js'
+import { ScanTargetError } from './securityScan.js'
+import { reportFilename } from './outreach.js'
 import { loadPlan } from './mvpAgents.js'
 import {
   activeJobOf, cancelJob, countBuiltMvps, createJob, deleteJobsFor, getJob, keepAlive, listJobs, resumeJob, runStep, validRunSignature,
@@ -225,7 +230,7 @@ app.patch('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
   try {
     if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
-    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id), deleteJobsFor(req.params.id), deleteEmailsFor(req.params.id)])
+    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id), deleteJobsFor(req.params.id), deleteEmailsFor(req.params.id), deleteAuditsFor(req.params.id)])
     res.json({ deleted: true })
   } catch (err: any) {
     console.error('[users] delete failed:', err.message)
@@ -1091,7 +1096,7 @@ app.get('/api/jobs', async (req, res) => {
   try {
     res.json({
       jobs: await listJobs(getAuth(res), {
-        kind: q.kind === 'mvp' || q.kind === 'gaps' ? q.kind : undefined,
+        kind: q.kind === 'mvp' || q.kind === 'gaps' || q.kind === 'security' ? q.kind : undefined,
         leadId: q.leadId || undefined,
         campaignId: q.campaignId || undefined,
         activeOnly: q.active === '1',
@@ -1276,6 +1281,111 @@ app.put('/api/settings-email', requireAdmin, async (req, res) => {
   if (from && !validEmail(addr(from))) { res.status(400).json({ error: 'Use a From address like "Your Agency <hello@youragency.com>".' }); return }
   if (replyTo && !validEmail(addr(replyTo))) { res.status(400).json({ error: 'The reply-to address does not look right.' }); return }
   try { res.json(await setEmailSettings(from, replyTo)) } catch (err: any) { res.status(503).json({ error: settingsError(err) }) }
+})
+
+// ── Security audits: a lead's products, reviewed passively, explained by Claude, shared as a PDF ──
+
+const latestSecurityJob = async (auth: ReturnType<typeof getAuth>, leadId: string) =>
+  (await listJobs(auth, { kind: 'security', leadId, limit: 1 }))[0] ?? null
+
+app.get('/api/security', async (req, res) => {
+  const auth = getAuth(res)
+  const leadId = String((req.query as Record<string, string>).leadId ?? '')
+  if (!leadId) { res.status(400).json({ error: 'leadId required' }); return }
+  try {
+    const [audit, job] = await Promise.all([getAudit(auth, leadId), latestSecurityJob(auth, leadId)])
+    res.json({ audit: audit ? publicAudit(audit) : null, job })
+  } catch (err: any) {
+    console.error('[security] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load the security audit.' })
+  }
+})
+
+// Creates the lead's audit (with its website as the first product) if there isn't one yet.
+app.post('/api/security', async (req, res) => {
+  const lead = req.body?.lead
+  if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
+  try {
+    const campaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : null
+    res.json({ audit: publicAudit(await auditFor(getAuth(res), lead, campaignId)) })
+  } catch (err: any) {
+    console.error('[security] create failed:', err.message)
+    res.status(503).json({ error: 'Could not start the security audit.' })
+  }
+})
+
+app.put('/api/security/:id/products', async (req, res) => {
+  const auth = getAuth(res)
+  try {
+    const d = await getAuditById(auth, req.params.id)
+    if (!d) { res.status(404).json({ error: 'Security audit not found' }); return }
+    if (await activeJobOf(auth, 'security', { leadId: d.leadId })) { res.status(409).json({ error: 'Wait for the running audit to finish before changing the products.' }); return }
+    const saved = await saveProducts(auth, req.params.id, req.body?.products)
+    res.json({ audit: saved ? publicAudit(saved) : null })
+  } catch (err: any) {
+    if (err instanceof ScanTargetError) { res.status(400).json({ error: err.message }); return }
+    console.error('[security] save products failed:', err.message)
+    res.status(503).json({ error: 'Could not save the products.' })
+  }
+})
+
+// Starts a background job: `discover` searches the web for the company's products, `run` reviews the chosen ones.
+app.post('/api/security/:id/:action(discover|run)', requirePermission('claude'), async (req, res) => {
+  const auth = getAuth(res)
+  const action = req.params.action as 'discover' | 'run'
+  try {
+    const d = await getAuditById(auth, req.params.id)
+    if (!d) { res.status(404).json({ error: 'Security audit not found' }); return }
+    const running = await activeJobOf(auth, 'security', { leadId: d.leadId })
+    if (running) { res.json({ job: await getJob(auth, String(running._id)) }); return }
+    const lead = req.body?.lead && typeof req.body.lead === 'object' ? req.body.lead : { name: d.leadName, site: d.site }
+    if (action === 'run') {
+      if (!d.products.some(p => p.selected)) { res.status(400).json({ error: 'Choose at least one product to audit.' }); return }
+      await resetSelected(d)
+    }
+    const start = action === 'run' ? auditJobStart(d) : { step: 'discover', state: {} }
+    const job = await createJob(auth, originOf(req), {
+      kind: 'security',
+      title: `${action === 'run' ? 'Security audit' : 'Finding products'}: ${d.leadName}`,
+      leadId: d.leadId,
+      campaignId: d.campaignId,
+      input: { auditId: String(d._id), mode: action === 'run' ? 'audit' : 'discover', lead },
+      ...start,
+    })
+    res.json({ job })
+  } catch (err: any) {
+    console.error('[security] start failed:', err.message)
+    res.status(503).json({ error: 'Could not start the job. Try again shortly.' })
+  }
+})
+
+app.get('/api/security/:id/report.pdf', async (req, res) => {
+  try {
+    const r = await auditPdf(getAuth(res), req.params.id)
+    if (!r) { res.status(404).json({ error: 'No report yet. Run the security audit first.' }); return }
+    const name = reportFilename(r.leadName)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${name.replace(/[^\x20-\x7e]/g, '').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`)
+    res.send(r.pdf)
+  } catch (err: any) {
+    console.error('[security] pdf failed:', err.message)
+    res.status(503).json({ error: 'Could not load the report.' })
+  }
+})
+
+app.post('/api/outreach/security-draft', async (req, res) => {
+  const auth = getAuth(res)
+  const lead = req.body?.lead
+  if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
+  try {
+    const d = await getAudit(auth, String(lead.id ?? lead.name))
+    if (!d?.report) { res.status(400).json({ error: 'Run the security audit for this lead first. The email shares its report.' }); return }
+    const campaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : null
+    res.json({ email: await createSecurityDraft(auth, { lead, audit: publicAudit(d), campaignId }) })
+  } catch (err: any) {
+    console.error('[outreach] security draft failed:', err.message)
+    res.status(503).json({ error: 'Could not write the draft. Try again shortly.' })
+  }
 })
 
 // List Graph8 contacts directly

@@ -86,13 +86,19 @@ async function claudeEnv(token: string) {
   return { home, env }
 }
 
-// One Claude run (single turn, no tools) with the saved token, in an isolated subprocess.
+// One Claude run with the saved token, in an isolated subprocess: a single turn with no tools, or, with
+// `webResearch`, a few turns of web search and page reading (still no file or shell tools).
 // `onChars` receives the running length of the reply as it is written, for real progress.
-export async function runClaude(opts: { system: string; prompt: string; model: string; onChars?: (chars: number) => void }) {
+export async function runClaude(opts: {
+  system: string; prompt: string; model: string; onChars?: (chars: number) => void; webResearch?: boolean; deadlineMs?: number
+}) {
   const token = await getClaudeToken()
   if (!token) throw new ClaudeNotConfiguredError('Add your Claude token in Settings to generate MVPs.')
 
   const { home, env } = await claudeEnv(token)
+  const web = ['WebSearch', 'WebFetch']
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), opts.deadlineMs ?? 270_000)
 
   let result = ''
   let written = 0
@@ -102,11 +108,13 @@ export async function runClaude(opts: { system: string; prompt: string; model: s
       options: {
         model: opts.model,
         systemPrompt: opts.system,
-        tools: [],
-        maxTurns: 1,
+        tools: opts.webResearch ? web : [],
+        ...(opts.webResearch ? { allowedTools: web, disallowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Task'] } : {}),
+        maxTurns: opts.webResearch ? 14 : 1,
         settingSources: [],
         persistSession: false,
         includePartialMessages: !!opts.onChars,
+        abortController: abort,
         cwd: home,
         env,
         pathToClaudeCodeExecutable: process.env.VERCEL ? await ensureLinuxBinary() : undefined,
@@ -126,8 +134,10 @@ export async function runClaude(opts: { system: string; prompt: string; model: s
     }
   } catch (err) {
     // Scrub before the message can reach a log line.
-    const msg = (err instanceof Error ? err.message : String(err)).split(token).join('[redacted]')
+    const msg = abort.signal.aborted ? 'Claude run timed out' : (err instanceof Error ? err.message : String(err)).split(token).join('[redacted]')
     throw new Error(msg)
+  } finally {
+    clearTimeout(timer)
   }
   return result
 }
@@ -139,7 +149,8 @@ export function publicClaudeError(err: unknown) {
   if (/401|403|auth|token|credential|login/i.test(msg)) {
     return { status: 502, error: 'Claude rejected the saved token. Replace it in Settings.' }
   }
-  return { status: 502, error: 'MVP generation failed. Try again.' }
+  if (/timed out/i.test(msg)) return { status: 502, error: 'Claude took too long. Try again.' }
+  return { status: 502, error: 'The Claude run failed. Try again.' }
 }
 
 export interface AgentActivity { action: string; chars: number }

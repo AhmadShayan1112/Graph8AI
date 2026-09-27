@@ -146,7 +146,7 @@ export interface MvpPlanResult {
 export type JobStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled'
 export interface Job<S = Record<string, any>, O = Record<string, any>> {
   id: string
-  kind: 'mvp' | 'gaps'
+  kind: 'mvp' | 'gaps' | 'security'
   status: JobStatus
   step: string
   title: string
@@ -197,7 +197,7 @@ export const startMvpJob = (lead: Lead, campaignId: string | undefined, preferen
 export const startGapsJob = (campaignId: string, campaignName: string, leads: Array<{ id: string; name: string }>) =>
   apiFetch<{ job: GapsJob }>('/jobs', { method: 'POST', body: JSON.stringify({ kind: 'gaps', campaignId, campaignName, leads }) })
 export const fetchJob = <J extends Job = Job>(id: string) => apiFetch<{ job: J }>(`/jobs/${id}`)
-export const listJobs = <J extends Job = Job>(q: { kind?: 'mvp' | 'gaps'; leadId?: string; campaignId?: string; active?: boolean; limit?: number }) => {
+export const listJobs = <J extends Job = Job>(q: { kind?: 'mvp' | 'gaps' | 'security'; leadId?: string; campaignId?: string; active?: boolean; limit?: number }) => {
   const p = new URLSearchParams()
   if (q.kind) p.set('kind', q.kind)
   if (q.leadId) p.set('leadId', q.leadId)
@@ -551,6 +551,9 @@ export interface OutreachEmail {
   updatedAt: string
   sentAt: string | null
   username: string
+  kind: 'mvp' | 'security'
+  // The attached file's name (security report emails).
+  attachment: string | null
 }
 export const getOutreach = (leadId: string) =>
   apiFetch<{ emails: OutreachEmail[]; siteUrl: string | null; sending: { ready: boolean; from: string } }>(`/outreach?leadId=${encodeURIComponent(leadId)}`)
@@ -564,3 +567,60 @@ export interface EmailSettings { from: string; replyTo: string; keyConfigured: b
 export const getEmailSettings = () => apiFetch<EmailSettings>('/settings-email')
 export const saveEmailSettings = (from: string, replyTo: string) =>
   apiFetch<EmailSettings>('/settings-email', { method: 'PUT', body: JSON.stringify({ from, replyTo }) })
+
+// ── Security audits: the lead's products reviewed passively, explained by Claude, shared as a PDF ──
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+export interface SecurityFinding { id: string; severity: Severity; category: string; title: string; evidence: string; risk: string; fix: string }
+export interface SecurityProduct {
+  id: string
+  name: string
+  url: string
+  kind: string
+  description: string
+  source: 'website' | 'discovered' | 'manual'
+  sameDomain: boolean
+  selected: boolean
+  status: 'pending' | 'done' | 'failed'
+  error: string
+  score: number | null
+  summary: string
+  findings: SecurityFinding[]
+  positives: string[]
+  checks: Array<{ label: string; ok: boolean }>
+  scannedAt: string | null
+}
+export interface SecurityAudit {
+  id: string
+  leadId: string
+  leadName: string
+  site: string
+  discoveryNote: string
+  discoveredAt: string | null
+  products: SecurityProduct[]
+  report: { headline: string; summary: string; topRisks: string[]; nextSteps: string[]; score: number; createdAt: string } | null
+  hasPdf: boolean
+  updatedAt: string
+}
+export interface SecurityJobState {
+  phase?: string
+  queue?: string[]
+  total?: number
+  done?: number
+  current?: { id: string; name: string; phase: string } | null
+  found?: number
+}
+export type SecurityJob = Job<SecurityJobState>
+
+export const getSecurity = (leadId: string) =>
+  apiFetch<{ audit: SecurityAudit | null; job: SecurityJob | null }>(`/security?leadId=${encodeURIComponent(leadId)}`)
+export const createSecurityAudit = (lead: Lead, campaignId?: string) =>
+  apiFetch<{ audit: SecurityAudit }>('/security', { method: 'POST', body: JSON.stringify({ lead, campaignId }) })
+export const saveSecurityProducts = (id: string, products: Array<Pick<SecurityProduct, 'name' | 'url' | 'kind' | 'description' | 'selected'> & { id?: string }>) =>
+  apiFetch<{ audit: SecurityAudit }>(`/security/${id}/products`, { method: 'PUT', body: JSON.stringify({ products }) })
+export const discoverSecurityProducts = (id: string, lead: Lead) =>
+  apiFetch<{ job: SecurityJob }>(`/security/${id}/discover`, { method: 'POST', body: JSON.stringify({ lead }) })
+export const runSecurityAudit = (id: string, lead: Lead) =>
+  apiFetch<{ job: SecurityJob }>(`/security/${id}/run`, { method: 'POST', body: JSON.stringify({ lead }) })
+export const securityReportUrl = (id: string, download = false) => `${BASE}/security/${id}/report.pdf${download ? '?download=1' : ''}`
+export const draftSecurityOutreach = (lead: Lead, campaignId?: string) =>
+  apiFetch<{ email: OutreachEmail }>('/outreach/security-draft', { method: 'POST', body: JSON.stringify({ lead, campaignId }) })

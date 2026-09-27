@@ -4,7 +4,8 @@ import LandingPage from './pages/LandingPage'
 import DiscoverPage, { restoreDiscover } from './pages/DiscoverPage'
 import AuditPage from './pages/AuditPage'
 import BuildPage from './pages/BuildPage'
-import OutreachPage from './pages/OutreachPage'
+import OutreachPage, { type OutreachMode } from './pages/OutreachPage'
+import SecurityPage from './pages/SecurityPage'
 import SettingsPage from './pages/SettingsPage'
 import SitesPage from './pages/SitesPage'
 import UsersPage from './pages/UsersPage'
@@ -32,7 +33,7 @@ import './App.css'
 // The app lives under `#/page[/id]`, so a refresh or bookmark reopens the same page. The site root
 // without a hash is the landing page. (Hash routes never reach the server, whose `/:slug` paths are
 // the deployed MVP sites.)
-const PAGES = new Set(['dashboard', 'analysis', 'campaigns', 'discover', 'gaps', 'audit', 'build', 'outreach', 'pipeline', 'history', 'users', 'settings', 'support'])
+const PAGES = new Set(['dashboard', 'analysis', 'campaigns', 'discover', 'gaps', 'audit', 'security', 'build', 'outreach', 'pipeline', 'history', 'users', 'settings', 'support'])
 const PAGES_WITH_ID = new Set(['campaigns', 'analysis', 'gaps'])
 
 function readHash() {
@@ -95,6 +96,8 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   const [mvpType, setMvpType] = useState(initial.saved.mvpType ?? '')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [siteUrl, setSiteUrl] = useState<string | undefined>(initial.saved.siteUrl)
+  // Which email Outreach opens on: the MVP link, or the security audit report.
+  const [outreachMode, setOutreachMode] = useState<OutreachMode>('mvp')
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(initial.saved.activeCampaign ?? null)
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(idFor('campaigns'))
@@ -142,7 +145,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   const goBack = () => {
     // Skip lead pages whose lead is no longer selected; they would render empty.
-    const needsLead = new Set(['audit', 'build', 'outreach'])
+    const needsLead = new Set(['audit', 'security', 'build', 'outreach'])
     let target: string | undefined
     while ((target = visited.current.pop()) && needsLead.has(target) && !selectedLead) { /* skip */ }
     setCanGoBack(visited.current.length > 0)
@@ -196,6 +199,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   const handleOutreach = (url?: string) => {
     setSiteUrl(url)
+    setOutreachMode('mvp')
     setPage('outreach')
   }
 
@@ -376,10 +380,10 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
             onOpenSearch={id => { getSearch(id).then(r => handleOpenSearch(r.search)).catch(() => setPage('history')) }}
           />
         )}
-        {['audit', 'build', 'outreach'].includes(page) && !selectedLead && (
+        {['audit', 'security', 'build', 'outreach'].includes(page) && !selectedLead && (
           <LeadPicker
             key={page}
-            title={page === 'audit' ? 'Audit a lead' : page === 'build' ? 'Build an MVP for a lead' : 'Write outreach for a lead'}
+            title={page === 'audit' ? 'Audit a lead' : page === 'security' ? 'Run a security audit for a lead' : page === 'build' ? 'Build an MVP for a lead' : 'Write outreach for a lead'}
             subtitle={page === 'audit'
               ? 'Choose a campaign, then a lead. Leads Graph8 already enriched open with their company, decision maker and email; the rest are looked up when you open them.'
               : 'Choose a campaign, then the lead to work on.'}
@@ -428,10 +432,22 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         )}
         {page === 'outreach' && selectedLead && (
           <OutreachPage
+            key={`${selectedLead.id}-${outreachMode}`}
             lead={selectedLead}
             campaignId={activeCampaign?.id}
-            onBack={() => setPage('build')}
+            initialMode={outreachMode}
+            onBack={goBack}
             onOpenBuild={() => setPage('build')}
+            onOpenSecurity={() => setPage('security')}
+          />
+        )}
+        {page === 'security' && selectedLead && (
+          <SecurityPage
+            key={selectedLead.id}
+            lead={selectedLead}
+            campaignId={activeCampaign?.id}
+            onBack={goBack}
+            onEmail={() => { setOutreachMode('security'); setPage('outreach') }}
           />
         )}
         {page === 'pipeline' && <SitesPage />}

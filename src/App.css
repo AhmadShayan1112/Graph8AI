@@ -3195,3 +3195,73 @@ input, textarea, select { color: inherit; }
 /* Theme switch sits in the top bar, beside the logo. */
 .sidebar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 4px; }
 @media (max-width: 768px) { .sidebar-top .theme-toggle-compact { display: none; } }
+
+/* ─── Outreach: kind of email ─── */
+.seg-tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--c-e7e7e3); border-radius: 10px; background: var(--c-surface); max-width: 100%; overflow-x: auto; }
+.seg-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: 7px; background: none; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--c-5e636e); cursor: pointer; white-space: nowrap; }
+.seg-tabs button.active { background: var(--c-eef2fc); color: var(--c-ok-0-45-0-16-262); font-weight: 600; }
+.seg-tab-badge { font-size: 11.5px; padding: 1px 6px; border-radius: 999px; background: var(--c-f1f1ee); color: var(--c-5e636e); }
+.outreach-attachment { align-self: flex-start; padding: 6px 10px; border: 1px solid var(--c-e7e7e3); border-radius: 8px; font-size: 13px; word-break: break-word; }
+a.btn-secondary, a.btn-primary { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* ─── Security audit ─── */
+.sec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .sec-layout { grid-template-columns: 1fr; } }
+.sec-note { font-size: 12.5px; line-height: 1.5; margin: 0; }
+.sec-products { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sec-products li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--c-e7e7e3); border-radius: 10px; opacity: 0.7; }
+.sec-products li.on { opacity: 1; border-color: var(--c-a9bdeb); }
+.sec-products li > input[type="checkbox"] { margin-top: 9px; flex: none; }
+.sec-product-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sec-name { height: 32px; width: 100%; font-weight: 600; }
+.sec-url { font-size: 12.5px; color: var(--c-ok-0-45-0-16-262); word-break: break-all; }
+.sec-desc { font-size: 12.5px; }
+.sec-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.sec-tag { font-size: 11.5px; padding: 2px 7px; border-radius: 999px; background: var(--c-f1f1ee); color: var(--c-5e636e); }
+.sec-tag.warn { background: color-mix(in srgb, #D97706 16%, transparent); color: var(--c-8a5a00); }
+.sec-add { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) auto; gap: 8px; }
+.sec-add .input { width: 100%; min-width: 0; }
+@media (max-width: 560px) { .sec-add { grid-template-columns: 1fr; } }
+.sec-side { gap: 14px; }
+.sec-progress { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; align-items: flex-start; }
+.sec-bar { width: 100%; height: 6px; border-radius: 999px; background: var(--c-f1f1ee); overflow: hidden; }
+.sec-bar span { display: block; height: 100%; background: var(--c-ok-0-45-0-16-262); transition: width 0.4s ease; }
+.sec-report { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.55; }
+.sec-report p { margin: 0; }
+.sec-report-head { display: flex; align-items: center; gap: 12px; }
+.sec-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-5e636e); }
+.sec-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.sec-score { flex: none; display: inline-grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; color: #fff; font-size: 20px; font-weight: 700; line-height: 1; background: #6B7080; }
+.sec-score small { font-size: 10px; font-weight: 500; opacity: 0.85; }
+.sec-score.small { width: 40px; height: 40px; font-size: 14px; }
+.sec-score.good, .sec-score-chip.good { background: #1B8A5A; }
+.sec-score.fair, .sec-score-chip.fair { background: #B38600; }
+.sec-score.poor, .sec-score-chip.poor { background: #D35F0A; }
+.sec-score.bad, .sec-score-chip.bad { background: #C0341D; }
+.sec-score-chip { font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px; color: #fff; }
+.sec-results { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+.sec-results-title { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.sec-result { padding: 0; gap: 0; }
+.sec-result-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.sec-result-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sec-result-name .text-muted { font-size: 12.5px; overflow-wrap: anywhere; }
+.sec-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+@media (max-width: 640px) { .sec-result-head { flex-wrap: wrap; } .sec-counts { justify-content: flex-start; width: 100%; } }
+.sec-result-body { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; font-size: 13.5px; line-height: 1.55; }
+.sec-result-body p { margin: 0; }
+.sec-checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; font-size: 13px; }
+.sec-checks li.ok { color: var(--c-1b7a4e); }
+.sec-checks li.bad { color: var(--c-c0341d); }
+.sec-finding { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--c-e7e7e3); border-radius: 10px; overflow-wrap: anywhere; }
+.sec-finding-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.sec-evidence { font-size: 12.5px; }
+.sev { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.sev-critical { background: color-mix(in srgb, #B91C1C 16%, transparent); color: #B91C1C; }
+.sev-high { background: color-mix(in srgb, #DE520F 16%, transparent); color: #C2410C; }
+.sev-medium { background: color-mix(in srgb, #CA8A04 18%, transparent); color: #A16207; }
+.sev-low { background: color-mix(in srgb, #2563EB 14%, transparent); color: #2563EB; }
+.sev-info { background: var(--c-f1f1ee); color: var(--c-5e636e); }
+:root[data-theme="dark"] .sev-critical { color: #F87171; }
+:root[data-theme="dark"] .sev-high { color: #FB923C; }
+:root[data-theme="dark"] .sev-medium { color: #FACC15; }
+:root[data-theme="dark"] .sev-low { color: #60A5FA; }

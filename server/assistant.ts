@@ -21,7 +21,7 @@ Build & deploy -> Outreach.
   the menu, or the top bar on phones) goes to the landing page.
 
 ## Menu (left sidebar; on phones, the menu button at the top)
-Plan: Dashboard, Analysis, Campaigns. Prospect: Discover, Gap analysis, Audit, Build & deploy, Outreach.
+Plan: Dashboard, Analysis, Campaigns. Prospect: Discover, Gap analysis, Audit, Security audit, Build & deploy, Outreach.
 Records: Pipeline, History. Admin only: Users, Settings. Back returns to the previous page.
 The box at the bottom of the menu shows who is signed in and which tools are on.
 
@@ -102,8 +102,20 @@ press **Plan & build MVP** (about 3-6 minutes). **Rebuild with this plan** rerun
 **Deploy** to publish at <your site>/<business-name>, then **Write outreach**. Opening Build from Gap analysis
 uses that lead's analysis, so run gap analysis first for the best result.
 
+## Security audit  [#/security]  (needs Claude access)
+Pick a lead. Its website is listed as the first product; **Find products with Claude** searches the web for the
+company's other web products (web apps, portals, online stores, booking systems). Tick the ones to audit, edit names,
+remove or add addresses (up to 10), then **Run security audit**. Products on a different domain from the lead's
+website are marked: confirm they belong to the company. The review is passive (only what any visitor's browser sees:
+certificate, security headers, cookies, visible software versions, mixed content, SPF/DMARC email records,
+security.txt); nothing is attacked or submitted. Claude explains each finding (what we saw, why it matters, how to
+fix it) and Gapwise builds a PDF report with a score out of 100 per product. It runs on the server, so you can leave
+the page. **View PDF** / **Download**, then **Email this report** opens Outreach on the security report email.
+
 ## Outreach  [#/outreach]
-One email per lead that links to its deployed MVP (deploy the MVP first). **Write the email** drafts a short,
+Two tabs. **Security report**: Claude drafts a calm email sharing the lead's security audit, with the PDF report
+attached (run the security audit first); edit and send it like any other email.
+**MVP email**: one email per lead that links to its deployed MVP (deploy the MVP first). **Write the email** drafts a short,
 personal email from the lead's gap analysis with the MVP link in it; edit To, Subject and Message, **Save draft**,
 **Rewrite** or **Copy**, then **Send email** to send it from Gapwise. The link must stay in the message. Sent emails
 are listed per lead. There are no automatic follow-up sequences. Sending needs the admin to set up email in

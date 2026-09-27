@@ -1,20 +1,30 @@
 import { useEffect, useState, type FC } from 'react'
 import type { Lead } from '../types/lead'
-import { draftOutreach, getOutreach, saveOutreach, sendOutreach, type OutreachEmail } from '../lib/api'
+import {
+  draftOutreach, draftSecurityOutreach, getOutreach, getSecurity, saveOutreach, securityReportUrl, sendOutreach,
+  type OutreachEmail, type SecurityAudit,
+} from '../lib/api'
 import { confirmDialog } from '../components/Dialog'
+
+export type OutreachMode = 'mvp' | 'security'
 
 interface Props {
   lead: Lead
   // The campaign the lead came from, so the draft can use its gap analysis.
   campaignId?: string
+  initialMode?: OutreachMode
   onBack: () => void
   onOpenBuild: () => void
+  onOpenSecurity: () => void
 }
 
-// One email to the lead that links to its deployed MVP: drafted by Gapwise, edited here, sent from the workspace.
-const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
+// Two kinds of email to the lead, each drafted by Gapwise, edited here and sent from the workspace:
+// one that links to its deployed MVP, and one that shares its security audit with the PDF report attached.
+const OutreachPage: FC<Props> = ({ lead, campaignId, initialMode = 'mvp', onBack, onOpenBuild, onOpenSecurity }) => {
+  const [mode, setMode] = useState<OutreachMode>(initialMode)
   const [loading, setLoading] = useState(true)
   const [siteUrl, setSiteUrl] = useState<string | null>(null)
+  const [audit, setAudit] = useState<SecurityAudit | null>(null)
   const [sending, setSending] = useState<{ ready: boolean; from: string }>({ ready: false, from: '' })
   const [emails, setEmails] = useState<OutreachEmail[]>([])
   const [draft, setDraft] = useState<OutreachEmail | null>(null)
@@ -23,13 +33,21 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const load = () => getOutreach(String(lead.id)).then(r => {
+  const pick = (list: OutreachEmail[], m: OutreachMode) => {
+    const d = list.find(e => e.kind === m && e.status !== 'sent') ?? null
+    setDraft(d)
+    setForm(d ? { to: d.to, subject: d.subject, body: d.body } : { to: '', subject: '', body: '' })
+  }
+
+  const load = (m = mode) => Promise.all([
+    getOutreach(String(lead.id)),
+    getSecurity(String(lead.id)).catch(() => ({ audit: null })),
+  ]).then(([r, s]) => {
     setSiteUrl(r.siteUrl)
     setSending(r.sending)
     setEmails(r.emails)
-    const d = r.emails.find(e => e.status !== 'sent') ?? null
-    setDraft(d)
-    if (d) setForm({ to: d.to, subject: d.subject, body: d.body })
+    setAudit(s.audit)
+    pick(r.emails, m)
   })
 
   useEffect(() => {
@@ -38,9 +56,21 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id])
 
+  const switchMode = async (m: OutreachMode) => {
+    if (m === mode) return
+    if (dirty && !(await confirmDialog({
+      title: 'Leave this draft?', message: 'Your unsaved changes to this email will be lost.', confirmLabel: 'Switch',
+    }))) return
+    setMode(m)
+    setMessage(null)
+    pick(emails, m)
+  }
+
+  const security = mode === 'security'
+  const ready = security ? !!audit?.report && audit.hasPdf : !!siteUrl
   const dirty = !!draft && (form.to !== draft.to || form.subject !== draft.subject || form.body !== draft.body)
   const sent = emails.filter(e => e.status === 'sent')
-  const linkMissing = !!siteUrl && !!form.body && !form.body.includes(siteUrl)
+  const linkMissing = !security && !!siteUrl && !!form.body && !form.body.includes(siteUrl)
 
   const write = async () => {
     if (draft && (dirty || draft.body) && !(await confirmDialog({
@@ -49,9 +79,10 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     setBusy('draft')
     setMessage(null)
     try {
-      const { email } = await draftOutreach(lead, campaignId)
+      const { email } = security ? await draftSecurityOutreach(lead, campaignId) : await draftOutreach(lead, campaignId)
       setDraft(email)
       setForm({ to: email.to, subject: email.subject, body: email.body })
+      setEmails(list => [email, ...list.filter(e => !(e.kind === email.kind && e.status === 'draft'))])
     } catch (err: any) {
       setMessage({ text: err.message, ok: false })
     } finally {
@@ -66,6 +97,7 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     try {
       const { email } = await saveOutreach(draft.id, form)
       setDraft(email)
+      setEmails(list => list.map(e => (e.id === email.id ? email : e)))
       setMessage({ text: 'Draft saved.', ok: true })
       return email
     } catch (err: any) {
@@ -80,7 +112,9 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     if (!draft) return
     if (!(await confirmDialog({
       title: `Send this email to ${form.to || 'the lead'}?`,
-      message: <>It goes out from <b>{sending.from}</b> with the link to {lead.name}’s MVP. You can’t unsend it.</>,
+      message: security
+        ? <>It goes out from <b>{sending.from}</b> with {lead.name}’s security report attached as a PDF. You can’t unsend it.</>
+        : <>It goes out from <b>{sending.from}</b> with the link to {lead.name}’s MVP. You can’t unsend it.</>,
       confirmLabel: 'Send email', tone: 'info',
     }))) return
     if (dirty && !(await save())) return
@@ -89,9 +123,7 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     try {
       await sendOutreach(draft.id)
       setMessage({ text: `Sent to ${form.to}.`, ok: true })
-      setDraft(null)
-      setForm({ to: '', subject: '', body: '' })
-      await load()
+      await load(mode)
     } catch (err: any) {
       setMessage({ text: err.message, ok: false })
     } finally {
@@ -113,15 +145,25 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
     <div className="page-content fade-in">
       <header className="page-header">
         <div className="page-header-text">
-          <button className="back-link" onClick={onBack}>← Back to build</button>
+          <button className="back-link" onClick={onBack}>← Back</button>
           <h1 className="page-title">Email {lead.name}</h1>
-          <div className="page-subtitle">One email with the link to the MVP you built for them. Edit it, then send it from Gapwise.</div>
+          <div className="page-subtitle">
+            Send the MVP you built for them, or their security audit report. Gapwise drafts it; you edit it and send it.
+          </div>
         </div>
       </header>
 
+      <div className="seg-tabs" role="tablist" aria-label="Kind of email">
+        <button role="tab" aria-selected={!security} className={!security ? 'active' : ''} onClick={() => switchMode('mvp')}>MVP email</button>
+        <button role="tab" aria-selected={security} className={security ? 'active' : ''} onClick={() => switchMode('security')}>
+          Security report
+          {audit?.report && <span className="seg-tab-badge">{audit.report.score}/100</span>}
+        </button>
+      </div>
+
       {loading && <p className="text-muted"><span className="pulse">Loading…</span></p>}
 
-      {!loading && !siteUrl && (
+      {!loading && !ready && !security && (
         <div className="an-callout">
           <div className="an-callout-title">Deploy the MVP first</div>
           <div className="text-muted">The email is built around the live link to the solution you made for {lead.name}. Build and deploy it, then come back.</div>
@@ -129,17 +171,42 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
         </div>
       )}
 
-      {!loading && siteUrl && (
+      {!loading && !ready && security && (
+        <div className="an-callout">
+          <div className="an-callout-title">Run the security audit first</div>
+          <div className="text-muted">
+            Claude finds {lead.name}’s web products, reviews each one from the outside and writes a PDF report of what they are missing.
+            This email shares that report.
+          </div>
+          <button className="btn-primary" onClick={onOpenSecurity}>{audit ? 'Open the security audit' : 'Run a security audit'}</button>
+        </div>
+      )}
+
+      {!loading && ready && (
         <div className="outreach-layout">
           <section className="dash-panel outreach-compose" aria-label="Email draft">
-            <div className="outreach-link">
-              <span className="text-muted">MVP link</span>
-              <a href={siteUrl} target="_blank" rel="noopener noreferrer">{siteUrl}</a>
-            </div>
+            {security && audit ? (
+              <div className="outreach-link">
+                <span className="text-muted">Attached</span>
+                <a href={securityReportUrl(audit.id)} target="_blank" rel="noopener noreferrer">Security review PDF</a>
+                <span className="text-muted">
+                  Score {audit.report!.score}/100 · {audit.products.filter(p => p.selected && p.status === 'done').length} product(s)
+                </span>
+              </div>
+            ) : (
+              <div className="outreach-link">
+                <span className="text-muted">MVP link</span>
+                <a href={siteUrl!} target="_blank" rel="noopener noreferrer">{siteUrl}</a>
+              </div>
+            )}
 
             {!draft ? (
               <div className="dash-empty">
-                <p>Gapwise writes a short, personal email from {lead.name}’s gap analysis, with the MVP link in it. You can edit everything before sending.</p>
+                <p>
+                  {security
+                    ? <>Claude writes a short, calm email that shares {lead.name}’s security review, with the PDF attached. You can edit everything before sending.</>
+                    : <>Gapwise writes a short, personal email from {lead.name}’s gap analysis, with the MVP link in it. You can edit everything before sending.</>}
+                </p>
                 <button className="btn-primary" onClick={write} disabled={busy === 'draft'}>{busy === 'draft' ? 'Writing…' : 'Write the email'}</button>
               </div>
             ) : (
@@ -161,6 +228,7 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
                   <span>Message</span>
                   <textarea className="input outreach-body" rows={14} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} />
                 </label>
+                {draft.attachment && <div className="outreach-attachment">📎 {draft.attachment}</div>}
                 {linkMissing && <div className="settings-message bad">The MVP link is missing from the message. Add it back: {siteUrl}</div>}
                 {!sending.ready && (
                   <div className="settings-alert">Sending isn’t set up yet: the admin adds the email service key and a From address in Settings. You can still copy the email.</div>
@@ -187,7 +255,9 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, onBack, onOpenBuild }) => {
                 {sent.map(e => (
                   <li key={e.id}>
                     <strong>{e.subject}</strong>
-                    <span>To {e.to} · {e.sentAt ? new Date(e.sentAt).toLocaleString() : ''}{e.username ? ` · by ${e.username}` : ''}</span>
+                    <span>
+                      {e.kind === 'security' ? 'Security report · ' : ''}To {e.to} · {e.sentAt ? new Date(e.sentAt).toLocaleString() : ''}{e.username ? ` · by ${e.username}` : ''}
+                    </span>
                   </li>
                 ))}
               </ul>

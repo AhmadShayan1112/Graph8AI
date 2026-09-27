@@ -6,15 +6,16 @@ import { GeminiError } from './gemini.js'
 import { publicClaudeError } from './claude.js'
 import { campaignIdFor, getCampaignLead } from './campaigns.js'
 import { listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
+import { securityStep } from './security.js'
 import { SOLUTION_TYPES, buildModule, buildShell, imagesFor, loadPlanById, normalizeModules, planMvp, researchLead, savePlan } from './mvpAgents.js'
 
-// Background jobs: long work (MVP builds, gap analysis runs) belongs to the server, not to a browser tab.
+// Background jobs: long work (MVP builds, gap analysis runs, security audits) belongs to the server, not to a browser tab.
 // A job is a MongoDB document that moves through steps. Each step runs in its own server call, kept alive
 // after the reply by Vercel's waitUntil, and hands the job to a fresh call for the next step, so no single call
 // hits Vercel's 5-minute limit. A lock stops two calls running the same step; a job whose lock expired without
 // finishing is picked up again the next time anyone has Gapwise open. Pages only watch the document.
 
-export type JobKind = 'mvp' | 'gaps'
+export type JobKind = 'mvp' | 'gaps' | 'security'
 export type JobStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled'
 
 interface JobDoc {
@@ -233,7 +234,9 @@ export async function runStep(id: string) {
   }
 
   try {
-    const next = job.kind === 'mvp' ? await mvpStep(job, auth) : await gapsStep(job, auth)
+    const next = job.kind === 'mvp' ? await mvpStep(job, auth)
+      : job.kind === 'security' ? await securityJobStep(job, auth)
+        : await gapsStep(job, auth)
     if (next === 'done') {
       await patch(job._id, { status: 'done', step: 'done', finishedAt: new Date(), lockUntil: new Date(0), attempts: 0 })
       return
@@ -386,6 +389,13 @@ async function mvpStep(job: JobDoc, auth: AuthInfo): Promise<string> {
     return 'done'
   }
   return 'done'
+}
+
+// ── Security audit: find products, or review one product per step, then write the report ──
+
+async function securityJobStep(job: JobDoc, auth: AuthInfo): Promise<string> {
+  if (!auth.permissions.claude) throw Object.assign(new Error('Security audits with Claude are turned off for this account.'), { status: 403 })
+  return securityStep(job, set => patch(job._id, set))
 }
 
 // ── Gap analysis: one lead per step ──
