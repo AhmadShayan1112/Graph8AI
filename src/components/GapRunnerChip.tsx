@@ -16,9 +16,9 @@ const GapRunnerChip: FC<{ onOpen: (campaignId: string) => void; onOpenBuild?: (j
   const builds = run.mvpJobs.map(j => {
     const label = j.step === 'research' ? 'Researching' : j.step === 'plan' ? 'Planning & designing' : j.step === 'build' ? (j.action || 'Building') : 'Starting'
     return (
-      <button key={j.id} className={`runner-chip ${compact ? 'compact' : ''}`} onClick={() => onOpenBuild?.(j)} title="Open this MVP build">
+      <button key={j.id} className={`runner-chip ${compact ? 'compact' : ''}`} onClick={() => onOpenBuild?.(j)} title={`Open the MVP build for ${j.title}`}>
         <span className="runner-chip-row">
-          <span className="runner-chip-title"><span className="runner-dot" aria-hidden />{compact ? 'Building MVP' : j.title}</span>
+          <span className="runner-chip-title"><span className="runner-dot" aria-hidden /><span className="runner-chip-text">{compact ? 'Building MVP' : j.title}</span></span>
           {j.step === 'build' && <span className="runner-chip-pct">{Math.min(95, Math.round((j.chars / 30_000) * 100))}%</span>}
         </span>
         {!compact && <span className="runner-chip-sub">{label}</span>}
@@ -31,7 +31,7 @@ const GapRunnerChip: FC<{ onOpen: (campaignId: string) => void; onOpenBuild?: (j
     const p = run.paused
     gaps = (
       <button className={`runner-chip paused ${compact ? 'compact' : ''}`} onClick={() => onOpen(p.campaignId)} title="Open gap analysis to resume">
-        <span className="runner-chip-title">Gap analysis paused</span>
+        <span className="runner-chip-title"><span className="runner-chip-text">Gap analysis paused</span></span>
         {!compact && <span className="runner-chip-sub">{p.queue.length} lead{p.queue.length === 1 ? '' : 's'} left in {p.campaignName}</span>}
       </button>
     )
@@ -40,7 +40,7 @@ const GapRunnerChip: FC<{ onOpen: (campaignId: string) => void; onOpenBuild?: (j
     gaps = (
       <button className={`runner-chip ${compact ? 'compact' : ''}`} onClick={() => run.campaignId && onOpen(run.campaignId)} title="Open gap analysis">
         <span className="runner-chip-row">
-          <span className="runner-chip-title"><span className="runner-dot" aria-hidden />Analysing {Math.min(run.done + 1, run.total)} of {run.total}</span>
+          <span className="runner-chip-title"><span className="runner-dot" aria-hidden /><span className="runner-chip-text">Analysing {Math.min(run.done + 1, run.total)} of {run.total}</span></span>
           <span className="runner-chip-pct">{pct}%</span>
         </span>
         {!compact && (
