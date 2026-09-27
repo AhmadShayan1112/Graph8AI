@@ -675,15 +675,38 @@ app.get('/api/campaigns/:id/gaps', async (req, res) => {
   }
 })
 
+// Streams newline-delimited JSON: a `stage` event as each step starts, then `done` with the analysis
+// (or `error`). Problems found before streaming starts still come back as a normal JSON error.
 app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (req, res) => {
+  let found: Awaited<ReturnType<typeof getCampaignLead>>
   try {
-    const found = await getCampaignLead(getAuth(res), req.params.id, req.params.leadId)
-    if (!found) { res.status(404).json({ error: 'Lead not found in this campaign' }); return }
-    res.json({ analysis: await runGapAnalysis(getAuth(res), found.campaignId, found.lead) })
+    found = await getCampaignLead(getAuth(res), req.params.id, req.params.leadId)
   } catch (err: any) {
-    if (err instanceof GeminiError) { res.status(err.status).json({ error: err.message }); return }
-    console.error('[gaps] run failed:', err.message)
-    res.status(502).json({ error: 'The gap analysis failed. Try again shortly.' })
+    console.error('[gaps] lead lookup failed:', err.message)
+    res.status(503).json({ error: 'Could not load that lead.' })
+    return
+  }
+  if (!found) { res.status(404).json({ error: 'Lead not found in this campaign' }); return }
+
+  res.status(200)
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+  const send = (event: Record<string, unknown>) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`) }
+  // Keeps the connection visibly alive through the long web-research step.
+  const heartbeat = setInterval(() => send({ type: 'tick' }), 5000)
+  try {
+    const analysis = await runGapAnalysis(getAuth(res), found.campaignId, found.lead, stage => send({ type: 'stage', stage }))
+    send({ type: 'done', analysis })
+  } catch (err: any) {
+    if (err instanceof GeminiError) send({ type: 'error', error: err.message, status: err.status })
+    else {
+      console.error('[gaps] run failed:', err.message)
+      send({ type: 'error', error: 'The gap analysis failed. Try again shortly.', status: 502 })
+    }
+  } finally {
+    clearInterval(heartbeat)
+    res.end()
   }
 })
 

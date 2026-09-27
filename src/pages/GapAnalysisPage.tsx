@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FC } from 'react'
 import {
   getCampaign, listCampaigns, listGapAnalyses, runGapAnalysis,
-  type Campaign, type CampaignLead, type CampaignSummary, type GapAnalysis, type GapLevel,
+  type Campaign, type CampaignLead, type CampaignSummary, type GapAnalysis, type GapLevel, type GapStage,
 } from '../lib/api'
 import { useSession } from '../components/LoginGate'
 
@@ -21,6 +21,34 @@ const OFFER_LABEL: Record<string, string> = {
 }
 const LEVEL_LABEL: Record<GapLevel, string> = { high: 'High', medium: 'Medium', low: 'Low' }
 
+// Progress through one lead. Stage changes come from the server as they happen; within a stage the bar
+// eases toward that stage's ceiling, so it keeps moving but never claims a step that hasn't finished.
+type Phase = 'starting' | GapStage
+interface Progress { leadId: string; phase: Phase; phaseAt: number; startedAt: number; seen: Phase[] }
+
+const STEPS: Array<{ key: GapStage; label: string }> = [
+  { key: 'graph8', label: 'Reading the Graph8 company record' },
+  { key: 'research', label: 'Gemini researching the business on the web' },
+  { key: 'saving', label: 'Writing the gaps and prospect profile' },
+]
+
+function progressPct(p: Progress, now: number, expectedMs: number): number {
+  const t = Math.max(0, now - p.phaseAt)
+  const ease = (from: number, to: number, tau: number) => from + (to - from) * (1 - Math.exp(-t / tau))
+  switch (p.phase) {
+    case 'starting': return ease(0, 5, 800)
+    case 'graph8': return ease(5, 15, 1500)
+    case 'research': return ease(15, 92, expectedMs / 2.2)
+    case 'saving': return ease(93, 98, 600)
+    default: return 0
+  }
+}
+
+const seconds = (ms: number) => {
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
+
 const fitClass = (n: number) => (n >= 70 ? 'good' : n >= 40 ? 'fair' : 'poor')
 
 const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit, onNewCampaign }) => {
@@ -30,14 +58,24 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   const [leads, setLeads] = useState<CampaignLead[]>([])
   const [results, setResults] = useState<Record<string, GapAnalysis>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [running, setRunning] = useState<string | null>(null)
+  const [progress, setProgress] = useState<Progress | null>(null)
+  const [now, setNow] = useState(Date.now())
+  // How long finished leads took this session; drives the time-left estimate and the bar's pacing.
+  const [durations, setDurations] = useState<number[]>([])
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
+  const running = progress?.leadId ?? null
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const stopRef = useRef(false)
   const detailRef = useRef<HTMLDivElement>(null)
 
   const canRun = user.permissions.gemini
+
+  useEffect(() => {
+    if (!progress) return
+    const t = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(t)
+  }, [progress])
 
   useEffect(() => {
     listCampaigns().then(r => {
@@ -68,17 +106,21 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
 
   const analyse = async (lead: CampaignLead) => {
     if (!campaign) return false
-    setRunning(lead.id)
+    const startedAt = Date.now()
+    setProgress({ leadId: lead.id, phase: 'starting', phaseAt: startedAt, startedAt, seen: ['starting'] })
+    setNow(startedAt)
     setError('')
     try {
-      const { analysis } = await runGapAnalysis(campaign.id, lead.id)
+      const analysis = await runGapAnalysis(campaign.id, lead.id, stage =>
+        setProgress(p => p && { ...p, phase: stage, phaseAt: Date.now(), seen: [...p.seen, stage] }))
       setResults(r => ({ ...r, [lead.id]: analysis }))
+      setDurations(d => [...d, Date.now() - startedAt].slice(-10))
       return true
     } catch (err: any) {
       setError(`${lead.name}: ${err.message}`)
       return false
     } finally {
-      setRunning(null)
+      setProgress(null)
     }
   }
 
@@ -106,6 +148,12 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   }
 
   const analysed = leads.filter(l => results[l.id])
+  const avgMs = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0
+  const leadPct = progress ? progressPct(progress, now, avgMs || 30_000) : 0
+  const overallPct = batch ? ((batch.done + leadPct / 100) / batch.total) * 100 : 0
+  const timeLeft = batch && avgMs && progress
+    ? Math.max(0, avgMs * (batch.total - batch.done) - (now - progress.startedAt))
+    : null
   const avgFit = analysed.length
     ? Math.round(analysed.reduce((s, l) => s + results[l.id].result.prospect.fitScore, 0) / analysed.length)
     : null
@@ -168,12 +216,21 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
       {error && <div className="settings-alert">{error}</div>}
 
       {batch && (
-        <div className="gap-progress">
-          <div className="gap-progress-text">
-            <span className="pulse">Analysing</span> {Math.min(batch.done + 1, batch.total)} of {batch.total}
-            {lead && <> · <strong>{lead.name}</strong></>}
+        <div className="gap-progress" role="status" aria-live="polite">
+          <div className="gap-progress-row">
+            <span className="gap-progress-title">
+              Lead {Math.min(batch.done + 1, batch.total)} of {batch.total}
+              {progress && <> — {leads.find(l => l.id === progress.leadId)?.name}</>}
+            </span>
+            <span className="gap-progress-pct">{Math.floor(overallPct)}%</span>
           </div>
-          <div className="an-meter"><span style={{ width: `${(batch.done / batch.total) * 100}%` }} /></div>
+          <div className="gap-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(overallPct)} aria-label="Overall progress">
+            <span style={{ width: `${overallPct}%` }} />
+          </div>
+          <div className="gap-progress-meta">
+            <span>{batch.done} done, {batch.total - batch.done} to go</span>
+            <span>{timeLeft != null ? `About ${seconds(timeLeft)} left` : 'Estimating time left…'}</span>
+          </div>
         </div>
       )}
 
@@ -232,7 +289,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
                         {r?.result.gaps[0] && <span className="gap-item-gap">{r.result.gaps[0].title}</span>}
                       </span>
                       {running === l.id ? (
-                        <span className="gap-fit pending pulse">…</span>
+                        <span className="gap-fit pending">{Math.floor(leadPct)}%</span>
                       ) : r ? (
                         <span className={`gap-fit ${fitClass(r.result.prospect.fitScore)}`} title="Fit score">{r.result.prospect.fitScore}</span>
                       ) : (
@@ -266,10 +323,38 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
                     </div>
                   </div>
 
-                  {running === lead.id && !gap && (
-                    <div className="an-callout">
-                      <div className="an-callout-title pulse">Researching {lead.name}…</div>
-                      <div className="text-muted">Gemini is searching the web for their website, Google listing, reviews and social pages. This takes up to a minute.</div>
+                  {progress && running === lead.id && (
+                    <div className="lead-progress" role="status" aria-live="polite">
+                      <div className="gap-progress-row">
+                        <span className="gap-progress-title">{gap ? 'Re-running' : 'Researching'} {lead.name}</span>
+                        <span className="gap-progress-pct">{Math.floor(leadPct)}%</span>
+                      </div>
+                      <div className="gap-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(leadPct)} aria-label="Progress for this lead">
+                        <span style={{ width: `${leadPct}%` }} />
+                      </div>
+                      <ol className="lead-steps">
+                        {STEPS.map((step, i) => {
+                          const order: Phase[] = ['starting', 'graph8', 'research', 'saving']
+                          const cur = order.indexOf(progress.phase)
+                          const mine = order.indexOf(step.key)
+                          const skipped = step.key === 'graph8' && !progress.seen.includes('graph8') && cur > mine
+                          const state = skipped ? 'skipped' : cur > mine ? 'done' : cur === mine ? 'active' : 'waiting'
+                          return (
+                            <li key={step.key} className={`lead-step ${state}`}>
+                              <span className="lead-step-icon" aria-hidden>{state === 'done' ? '✓' : state === 'skipped' ? '–' : i + 1}</span>
+                              <span className="lead-step-label">
+                                {step.label}
+                                {state === 'skipped' && <span className="lead-step-note"> — skipped, no Graph8 access or website</span>}
+                              </span>
+                              {state === 'active' && <span className="lead-step-time">{seconds(now - progress.phaseAt)}</span>}
+                            </li>
+                          )
+                        })}
+                      </ol>
+                      <div className="gap-progress-meta">
+                        <span>Elapsed {seconds(now - progress.startedAt)}</span>
+                        <span>{avgMs ? `Usually about ${seconds(avgMs)}` : 'Usually 20–60s'}</span>
+                      </div>
                     </div>
                   )}
 

@@ -143,10 +143,19 @@ Reply with ONLY a JSON object, no prose before or after, in exactly this shape:
 Return 2-6 gaps and 1-4 needs, most important first.`
 }
 
-export async function runGapAnalysis(auth: AuthInfo, campaignId: ObjectId, lead: Record<string, any>) {
+// The stages a run goes through, reported as each one starts so the page can show real progress.
+export type GapStage = 'graph8' | 'research' | 'saving'
+
+export async function runGapAnalysis(
+  auth: AuthInfo,
+  campaignId: ObjectId,
+  lead: Record<string, any>,
+  onStage: (stage: GapStage) => void = () => {},
+) {
   // Graph8's fuller company record, when this person may use Graph8 and the lead has a domain.
   let company: Record<string, any> | null = null
   if (auth.permissions.graph8 && lead.site) {
+    onStage('graph8')
     const found = await lookupCompany(lead.site).catch(() => null)
     const c = found?.found ? found.data ?? {} : null
     if (c) {
@@ -162,7 +171,9 @@ export async function runGapAnalysis(auth: AuthInfo, campaignId: ObjectId, lead:
     }
   }
 
+  onStage('research')
   const answer = await askGeminiWithSearch(buildPrompt(lead, company))
+  onStage('saving')
   const result = normalize(extractJson(answer.text))
   const doc: Omit<GapDoc, '_id'> = {
     campaignId,

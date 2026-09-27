@@ -276,6 +276,38 @@ export interface GapAnalysis {
 
 export const listGapAnalyses = (campaignId: string) =>
   apiFetch<{ analyses: GapAnalysis[] }>(`/campaigns/${campaignId}/gaps`)
-// Runs Graph8 + Gemini web research for one lead; takes 10-60 seconds.
-export const runGapAnalysis = (campaignId: string, leadId: string) =>
-  apiFetch<{ analysis: GapAnalysis }>(`/campaigns/${campaignId}/gaps/${encodeURIComponent(leadId)}`, { method: 'POST' })
+export type GapStage = 'graph8' | 'research' | 'saving'
+
+// Runs Graph8 + Gemini web research for one lead (10-60 seconds). The server streams one JSON event per line:
+// `stage` as each step starts, then `done` with the analysis or `error`.
+export async function runGapAnalysis(campaignId: string, leadId: string, onStage: (stage: GapStage) => void) {
+  const res = await fetch(`${BASE}/campaigns/${campaignId}/gaps/${encodeURIComponent(leadId)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => null)
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    throw new ApiError(body?.error || `API error: ${res.status}`, res.status)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim()
+      buffer = buffer.slice(nl + 1)
+      if (!line) continue
+      const event = JSON.parse(line)
+      if (event.type === 'stage') onStage(event.stage)
+      else if (event.type === 'done') return event.analysis as GapAnalysis
+      else if (event.type === 'error') throw new ApiError(event.error, event.status ?? 502)
+    }
+    if (done) break
+  }
+  throw new ApiError('The gap analysis stopped before it finished. Try again.', 502)
+}
