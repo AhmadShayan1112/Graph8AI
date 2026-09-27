@@ -1,6 +1,9 @@
 import { useEffect, useState, type FC } from 'react'
 import type { Lead, MvpData } from '../types/lead'
-import { buildMvp, deploySite, planMvp, type MvpAgent, type MvpPlanResult } from '../lib/api'
+import {
+  cancelJob, deploySite, fetchJob, isActiveJob, listJobs, resumeJob, startMvpJob, type MvpAgent, type MvpJob,
+} from '../lib/api'
+import { refreshRunner } from '../lib/gapRunner'
 import { useSession } from '../components/LoginGate'
 import { OFFER_LABEL } from '../lib/offers'
 
@@ -36,87 +39,76 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
   const { user } = useSession()
   const canBuild = user.permissions.claude
   const [preference, setPreference] = useState(mvpType && OFFER_LABEL[mvpType] ? mvpType : '')
-  const [status, setStatus] = useState<Record<MvpAgent, Status>>({ research: 'waiting', strategy: 'waiting', design: 'waiting', build: 'waiting' })
-  const [startedAt, setStartedAt] = useState<Partial<Record<MvpAgent, number>>>({})
-  const [finishedAt, setFinishedAt] = useState<Partial<Record<MvpAgent, number>>>({})
+  // The build runs on the server as a job; this page only watches it, so leaving or refreshing loses nothing.
+  const [job, setJob] = useState<MvpJob | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [now, setNow] = useState(Date.now())
-  const [research, setResearch] = useState<{ data: Record<string, any> | null; note: string } | null>(null)
-  const [plan, setPlan] = useState<MvpPlanResult | null>(null)
-  const [chars, setChars] = useState(0)
-  const [buildAction, setBuildAction] = useState('')
-  const [mvp, setMvp] = useState<MvpData | null>(null)
-  const [running, setRunning] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [error, setError] = useState<{ text: string; settings: boolean } | null>(null)
   const [deploying, setDeploying] = useState(false)
   const [siteUrl, setSiteUrl] = useState('')
 
+  // The latest build for this lead: running, finished or failed.
   useEffect(() => {
-    if (!running) return
-    const t = setInterval(() => setNow(Date.now()), 500)
-    return () => clearInterval(t)
-  }, [running])
+    listJobs<MvpJob>({ kind: 'mvp', leadId: String(lead.id), limit: 1 })
+      .then(r => setJob(r.jobs[0] ?? null))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [lead.id])
 
-  const mark = (key: MvpAgent, s: Status) => {
-    setStatus(prev => ({ ...prev, [key]: s }))
-    if (s === 'active') setStartedAt(p => ({ ...p, [key]: Date.now() }))
-    if (s === 'done' || s === 'skipped') setFinishedAt(p => ({ ...p, [key]: Date.now() }))
-  }
+  const active = isActiveJob(job)
 
-  const fail = (err: any) => {
-    setError({ text: err.message, settings: !!onOpenSettings && err.status === 400 && /Settings/.test(err.message) })
-    setStatus(prev => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, v === 'active' ? 'waiting' : v])) as Record<MvpAgent, Status>)
-  }
+  // Watch the job while it runs.
+  useEffect(() => {
+    if (!job || !active) return
+    const t = setInterval(() => {
+      setNow(Date.now())
+      fetchJob<MvpJob>(job.id).then(r => setJob(r.job)).catch(() => {})
+    }, 2000)
+    const tick = setInterval(() => setNow(Date.now()), 500)
+    return () => { clearInterval(t); clearInterval(tick) }
+  }, [job?.id, active])
 
-  const runBuild = async (p: MvpPlanResult) => {
-    setMvp(null)
-    setSiteUrl('')
-    setChars(0)
-    setBuildAction('')
-    mark('build', 'active')
-    const result = await buildMvp(p.planId, e => {
-      if (e.type === 'progress') { setChars(e.chars); if (e.action) setBuildAction(e.action) }
-    })
-    mark('build', 'done')
-    setMvp(result.mvp)
-  }
-
-  const planAndBuild = async () => {
-    setRunning(true)
+  const start = async (planId?: string) => {
+    setStarting(true)
     setError(null)
-    setResearch(null)
-    setPlan(null)
-    setMvp(null)
     setSiteUrl('')
-    setStatus({ research: 'waiting', strategy: 'waiting', design: 'waiting', build: 'waiting' })
-    setStartedAt({})
-    setFinishedAt({})
     try {
-      const p = await planMvp(lead, campaignId, preference, e => {
-        if (e.type === 'stage' && e.stage === 'research') mark('research', 'active')
-        if (e.type === 'research') {
-          setResearch({ data: e.research, note: e.note })
-          mark('research', e.research ? 'done' : 'skipped')
-        }
-        if (e.type === 'stage' && e.stage === 'strategy') { mark('strategy', 'active'); mark('design', 'active') }
-      })
-      mark('strategy', 'done')
-      mark('design', 'done')
-      setResearch(r => r ?? { data: p.research, note: p.researchNote })
-      setPlan(p)
-      await runBuild(p)
+      setJob((await startMvpJob(lead, campaignId, preference, planId)).job)
+      refreshRunner()
     } catch (err: any) {
-      fail(err)
+      setError({ text: err.message, settings: !!onOpenSettings && err.status === 400 && /Settings/.test(err.message) })
     } finally {
-      setRunning(false)
+      setStarting(false)
     }
   }
 
-  const rebuild = async () => {
-    if (!plan) return
-    setRunning(true)
-    setError(null)
-    try { await runBuild(plan) } catch (err: any) { fail(err) } finally { setRunning(false) }
+  const stop = async () => { if (job) setJob((await cancelJob(job.id)).job as MvpJob) }
+  const resume = async () => { if (job) setJob((await resumeJob(job.id)).job as MvpJob) }
+
+  const s = job?.state ?? {}
+  const agentStatus = (k: MvpAgent): Status => {
+    const v = s.agents?.[k]
+    if (v === 'done') return 'done'
+    if (v === 'skipped') return 'skipped'
+    if (v === 'active' && active) return 'active'
+    return 'waiting'
   }
+  const status: Record<MvpAgent, Status> = {
+    research: agentStatus('research'), strategy: agentStatus('strategy'), design: agentStatus('design'), build: agentStatus('build'),
+  }
+  const timeOf = (a?: string, b?: string) => (a ? seconds((b ? new Date(b).getTime() : now) - new Date(a).getTime()) : '')
+  const elapsed = (k: MvpAgent) =>
+    k === 'research' ? timeOf(s.researchStartedAt, s.researchDoneAt)
+      : k === 'build' ? timeOf(s.buildStartedAt, s.buildDoneAt)
+      : timeOf(s.planStartedAt, s.planDoneAt)
+  const research = s.research !== undefined || s.researchNote ? { data: s.research ?? null, note: s.researchNote ?? '' } : null
+  const plan = s.plan ? { plan: s.plan, images: s.images ?? [], planId: s.planId ?? '' } : null
+  const chars = s.build?.chars ?? 0
+  const buildAction = s.build?.action ?? ''
+  const mvp: MvpData | null = job?.status === 'done' ? job.output : null
+  const running = active || starting
+  const failed = job?.status === 'failed' || job?.status === 'paused'
 
   const handleDeploy = async () => {
     if (!mvp) return
@@ -132,11 +124,6 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
     }
   }
 
-  const elapsed = (k: MvpAgent) => {
-    const s = startedAt[k]
-    if (!s) return ''
-    return seconds((finishedAt[k] ?? now) - s)
-  }
   const buildPct = status.build === 'done' ? 100 : Math.min(95, Math.round((chars / EXPECTED_CHARS) * 100))
   const r = research?.data
   const pl = plan?.plan
@@ -172,12 +159,27 @@ const BuildPage: FC<Props> = ({ lead, mvpType, campaignId, onOutreach, onBack, o
           {!canBuild && (
             <div className="settings-alert build-error">MVP generation with Claude is turned off for your account. Ask the admin to enable it.</div>
           )}
-          <button className="btn-primary full-width" onClick={planAndBuild} disabled={running || !canBuild}>
-            {running ? 'Agents at work…' : mvp ? 'Re-plan and rebuild' : 'Plan & build MVP'}
-          </button>
-          {plan && !running && (
-            <button className="btn-secondary full-width" onClick={rebuild} disabled={!canBuild}>Rebuild with this plan</button>
+          {running ? (
+            <button className="btn-secondary full-width" onClick={stop} disabled={!job || job.cancelRequested}>
+              {job?.cancelRequested ? 'Stopping after this step…' : 'Stop'}
+            </button>
+          ) : (
+            <button className="btn-primary full-width" onClick={() => start()} disabled={!canBuild || !loaded}>
+              {mvp ? 'Re-plan and rebuild' : 'Plan & build MVP'}
+            </button>
           )}
+          {plan && !running && (
+            <button className="btn-secondary full-width" onClick={() => start(plan.planId)} disabled={!canBuild}>Rebuild with this plan</button>
+          )}
+          {failed && !running && job && (
+            <button className="btn-secondary full-width" onClick={resume} disabled={!canBuild}>Resume from where it stopped</button>
+          )}
+          {running && (
+            <div className="settings-message ok build-bg-note">
+              This keeps running on the server. You can leave this page or refresh; come back any time to see it.
+            </div>
+          )}
+          {failed && job?.error && <div className="settings-alert build-error">{job.error}</div>}
           {error && (
             <div className="settings-alert build-error">
               {error.text}

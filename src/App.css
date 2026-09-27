@@ -2557,7 +2557,7 @@ body {
 .runner-dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.52 0.16 262); animation: pulse 1.4s infinite; }
 .runner-chip.compact { padding: 5px 9px; gap: 3px; border-radius: 8px; max-width: 150px; }
 .runner-chip.compact .runner-chip-title { font-size: 11.5px; }
-.sidebar-runner { display: flex; flex-direction: column; margin-bottom: 10px; }
+.sidebar-runner { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .sidebar-runner:empty { display: none; }
 .gap-elsewhere { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .gap-paused { background: #FFFBF0; border-color: #EBD9A3; }

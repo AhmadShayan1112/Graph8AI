@@ -231,6 +231,12 @@ export async function savePlan(auth: AuthInfo, p: Omit<PlanDoc, '_id' | 'ownerId
   return doc
 }
 
+// For background jobs, which already checked who started them.
+export async function loadPlanById(id: string) {
+  if (!ObjectId.isValid(id)) return null
+  return (await plans()).findOne({ _id: new ObjectId(id) })
+}
+
 export async function loadPlan(auth: AuthInfo, id: string) {
   if (!ObjectId.isValid(id)) return null
   return (await plans()).findOne({ _id: new ObjectId(id), ...(auth.role === 'admin' ? {} : { ownerId: auth.userId ?? 'admin' }) })

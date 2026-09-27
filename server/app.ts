@@ -19,8 +19,10 @@ import {
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
 import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
 import { deleteSecret, getGeminiModel, getWorkspaceAccess, secretStatus, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
-import { publicClaudeError } from './claude.js'
-import { SOLUTION_TYPES, buildMvp, imagesFor, loadPlan, planMvp, researchLead, savePlan } from './mvpAgents.js'
+import { loadPlan } from './mvpAgents.js'
+import {
+  activeJobOf, cancelJob, createJob, deleteJobsFor, getJob, keepAlive, listJobs, resumeJob, runStep, validRunSignature,
+} from './jobs.js'
 import { getDb } from './db.js'
 import {
   createUser, deleteUser, listUsers, normalizeUsername, parsePermissions, updateUser, validatePassword, validateUsername,
@@ -52,6 +54,13 @@ app.post('/api/auth/signup', signUp)
 // The public site's assistant and its "talk to a person" form work without signing in (rate-limited).
 app.post('/api/public/assistant', publicAssistantChat)
 app.post('/api/public/contact', createVisitorTicket)
+
+// Background job steps: called only by this server (signed), to continue a job in a fresh call.
+app.post('/api/internal/jobs/:id/run', (req, res) => {
+  if (!validRunSignature(req.params.id, String(req.headers['x-gapwise-job'] ?? ''))) { res.status(403).json({ error: 'Forbidden' }); return }
+  keepAlive(runStep(req.params.id))
+  res.status(202).json({ accepted: true })
+})
 
 // Deployed MVP sites are public so leads can open them.
 app.get(['/api/site/:slug', '/:slug'], serveSite)
@@ -212,7 +221,7 @@ app.patch('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
   try {
     if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
-    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id)])
+    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id), deleteJobsFor(req.params.id)])
     res.json({ deleted: true })
   } catch (err: any) {
     console.error('[users] delete failed:', err.message)
@@ -976,107 +985,123 @@ async function drafts() {
 }
 const sites = async () => (await getDb()).collection<SiteDoc>('sites')
 
-// Streams newline-delimited JSON events to the browser; a heartbeat keeps long steps visibly alive.
-function openStream(res: Response) {
-  res.status(200)
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-  res.setHeader('X-Accel-Buffering', 'no')
-  res.flushHeaders()
-  const send = (event: Record<string, unknown>) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(event)}\n`) }
-  const heartbeat = setInterval(() => send({ type: 'tick' }), 5000)
-  return { send, end: () => { clearInterval(heartbeat); res.end() } }
-}
+// ── Background jobs (MVP builds, gap analysis runs) ──
+// The work runs on the server whether or not anyone keeps the page open; pages start jobs and watch them.
 
-function mvpError(err: unknown, admin: boolean) {
-  if (err instanceof GeminiError) return err.message + (admin && err.detail ? ` Details: ${err.detail}` : '')
-  return publicClaudeError(err).error
-}
+const originOf = (req: Request) =>
+  `${String(req.headers['x-forwarded-proto'] ?? req.protocol).split(',')[0]}://${String(req.headers['x-forwarded-host'] ?? req.headers.host).split(',')[0]}`
 
-// Step 1 of an MVP: the researcher, strategist and designer agents produce a plan (saved for the build step).
-app.post('/api/mvp/plan', async (req, res) => {
+app.post('/api/jobs', async (req, res) => {
   const auth = getAuth(res)
-  const lead = req.body?.lead
-  if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
-  const preference = typeof req.body?.preference === 'string' ? req.body.preference : undefined
-  // The lead's gap analysis, when it was opened from a campaign that has one.
-  let gap: Record<string, any> | null = null
-  if (typeof req.body?.campaignId === 'string') {
-    const cid = await campaignIdFor(auth, req.body.campaignId).catch(() => null)
-    if (cid) gap = (await listGapAnalyses(cid).catch(() => [])).find(g => g.leadId === String(lead.id))?.result ?? null
-  }
-  const { industry, images } = imagesFor(String(lead.type ?? ''), `${lead.name} ${lead.enrichment?.company?.description ?? ''}`)
-  const stream = openStream(res)
+  const kind = req.body?.kind
   try {
-    let research: Record<string, any> | null = null
-    let researchNote = ''
-    stream.send({ type: 'stage', stage: 'research' })
-    if (!auth.permissions.gemini) {
-      researchNote = 'Web research skipped: gap analysis is turned off for this account, so the plan uses Graph8 data only.'
-    } else {
-      try {
-        const r = await researchLead(lead, gap)
-        research = { ...r.research, sources: r.sources }
-      } catch (err) {
-        researchNote = `Web research was not available (${err instanceof GeminiError ? err.message : 'error'}), so the plan uses Graph8 data only.`
-      }
+    if (kind === 'mvp') {
+      if (!auth.permissions.claude) { res.status(403).json({ error: 'MVP generation with Claude is turned off for your account. Ask the admin to enable it.' }); return }
+      const lead = req.body?.lead
+      if (!lead?.name || typeof lead !== 'object') { res.status(400).json({ error: 'lead required' }); return }
+      const leadId = String(lead.id ?? lead.name)
+      // One build per lead at a time: starting again while one runs just returns it.
+      const running = await activeJobOf(auth, 'mvp', { leadId })
+      if (running) { res.json({ job: await getJob(auth, String(running._id)) }); return }
+      const campaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : null
+      const preference = typeof req.body?.preference === 'string' ? req.body.preference : undefined
+      // "Rebuild with this plan": skip straight to the builder.
+      const planId = typeof req.body?.planId === 'string' ? req.body.planId : ''
+      const plan = planId ? await loadPlan(auth, planId).catch(() => null) : null
+      if (planId && !plan) { res.status(404).json({ error: 'That plan has expired. Plan the MVP again.' }); return }
+      const job = await createJob(auth, originOf(req), {
+        kind: 'mvp',
+        title: `MVP for ${lead.name}`,
+        leadId,
+        campaignId,
+        input: { lead, preference, planId: planId || undefined },
+        step: plan ? 'build' : 'research',
+        state: plan ? {
+          planId, plan: plan.plan, images: plan.images, industry: plan.industry, research: plan.research,
+          researchNote: plan.researchNote, agents: { research: plan.research ? 'done' : 'skipped', strategy: 'done', design: 'done' },
+        } : { agents: {} },
+      })
+      res.json({ job })
+      return
     }
-    stream.send({ type: 'research', research, note: researchNote, usedGapAnalysis: !!gap })
-
-    stream.send({ type: 'stage', stage: 'strategy' })
-    const plan = await planMvp(lead, gap, research, images, preference)
-    stream.send({ type: 'stage', stage: 'design' })
-    const saved = await savePlan(auth, {
-      leadId: String(lead.id ?? lead.name), leadName: String(lead.name), lead, research, researchNote, plan, images, industry,
-    })
-    stream.send({ type: 'done', planId: String(saved._id), plan, research, researchNote, images, industry, usedGapAnalysis: !!gap })
-  } catch (err) {
-    console.error('[mvp] plan failed:', err instanceof Error ? err.message : err)
-    stream.send({ type: 'error', error: mvpError(err, auth.role === 'admin') })
-  } finally {
-    stream.end()
+    if (kind === 'gaps') {
+      if (!auth.permissions.gemini) { res.status(403).json({ error: 'Gap analysis is turned off for your account. Ask the admin to enable it.' }); return }
+      const campaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : ''
+      if (!(await campaignIdFor(auth, campaignId).catch(() => null))) { res.status(404).json({ error: 'Campaign not found' }); return }
+      const queue = (Array.isArray(req.body?.leads) ? req.body.leads : [])
+        .filter((l: any) => typeof l?.id === 'string' && l.id)
+        .slice(0, 1000)
+        .map((l: any) => ({ id: l.id, name: String(l.name ?? '').slice(0, 120) }))
+      if (!queue.length) { res.status(400).json({ error: 'Choose at least one lead.' }); return }
+      // One gap-analysis run at a time per person keeps within the research service's limits.
+      const running = await activeJobOf(auth, 'gaps')
+      if (running) { res.status(409).json({ error: 'A gap analysis is already running. Wait for it or stop it first.', job: await getJob(auth, String(running._id)) }); return }
+      const job = await createJob(auth, originOf(req), {
+        kind: 'gaps',
+        title: `Gap analysis: ${String(req.body?.campaignName ?? 'campaign').slice(0, 80)}`,
+        campaignId,
+        input: { campaignName: String(req.body?.campaignName ?? '') },
+        step: 'lead',
+        state: { queue, total: queue.length, done: 0, durations: [], current: null, retry: null, lastError: '' },
+      })
+      res.json({ job })
+      return
+    }
+    res.status(400).json({ error: 'Unknown job kind' })
+  } catch (err: any) {
+    console.error('[jobs] create failed:', err.message)
+    res.status(503).json({ error: 'Could not start the job. Try again shortly.' })
   }
 })
 
-// Step 2: the builder agent writes the site from the saved plan; progress is the amount written so far.
-app.post('/api/mvp/generate', async (req, res) => {
-  const auth = getAuth(res)
-  const doc = await loadPlan(auth, String(req.body?.planId ?? '')).catch(() => null)
-  if (!doc) { res.status(404).json({ error: 'That plan has expired. Plan the MVP again.' }); return }
-  const stream = openStream(res)
+app.get('/api/jobs', async (req, res) => {
+  const q = req.query as Record<string, string>
   try {
-    stream.send({ type: 'stage', stage: 'build' })
-    let last = 0
-    let lastAction = ''
-    const html = await buildMvp(doc, ({ action, chars }) => {
-      if (action !== lastAction || chars - last >= 800) {
-        last = chars
-        lastAction = action
-        stream.send({ type: 'progress', chars, action })
-      }
+    res.json({
+      jobs: await listJobs(getAuth(res), {
+        kind: q.kind === 'mvp' || q.kind === 'gaps' ? q.kind : undefined,
+        leadId: q.leadId || undefined,
+        campaignId: q.campaignId || undefined,
+        activeOnly: q.active === '1',
+        limit: Math.min(Number(q.limit) || 20, 50),
+      }),
     })
-    const type = String(doc.plan?.solution?.type ?? 'booking-page')
-    const { insertedId } = await (await drafts()).insertOne({
-      html, leadId: doc.leadId, leadName: doc.leadName, mvpType: type, createdAt: new Date(),
-    })
-    const meta = SOLUTION_TYPES[type] ?? SOLUTION_TYPES['booking-page']
-    stream.send({
-      type: 'done',
-      mvp: {
-        title: String(doc.plan?.solution?.title || meta.title),
-        tag: meta.title,
-        description: String(doc.plan?.solution?.promise || meta.description),
-        fixes: (doc.plan?.solution?.fixesGaps ?? []).join(', '),
-        steps: (doc.plan?.flow ?? []).map((f: any) => String(f.screen ?? '')).filter(Boolean),
-        html,
-        draftId: String(insertedId),
-        solutionType: type,
-      },
-    })
-  } catch (err) {
-    console.error('[mvp] build failed:', err instanceof Error ? err.message : err)
-    stream.send({ type: 'error', error: mvpError(err, auth.role === 'admin') })
-  } finally {
-    stream.end()
+  } catch (err: any) {
+    console.error('[jobs] list failed:', err.message)
+    res.status(503).json({ error: 'Could not load jobs.' })
+  }
+})
+
+app.get('/api/jobs/:id', async (req, res) => {
+  try {
+    const job = await getJob(getAuth(res), req.params.id)
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return }
+    res.json({ job })
+  } catch (err: any) {
+    console.error('[jobs] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load the job.' })
+  }
+})
+
+app.post('/api/jobs/:id/cancel', async (req, res) => {
+  try {
+    const job = await cancelJob(getAuth(res), req.params.id)
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return }
+    res.json({ job })
+  } catch (err: any) {
+    console.error('[jobs] cancel failed:', err.message)
+    res.status(503).json({ error: 'Could not stop the job.' })
+  }
+})
+
+app.post('/api/jobs/:id/resume', async (req, res) => {
+  try {
+    const job = await resumeJob(getAuth(res), req.params.id, originOf(req))
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return }
+    res.json({ job })
+  } catch (err: any) {
+    console.error('[jobs] resume failed:', err.message)
+    res.status(503).json({ error: 'Could not resume the job.' })
   }
 })
 

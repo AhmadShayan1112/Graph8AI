@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { safeEqual, sign } from './crypto.js'
 import {
-  authenticateUser, getSessionUser, normalizeUsername, signUp as createAccount, validatePassword, validateUsername,
+  authenticateUser, getActiveUser, getSessionUser, normalizeUsername, signUp as createAccount, validatePassword, validateUsername,
   type Permission, type Permissions,
 } from './users.js'
 import { getWorkspaceAccess } from './secrets.js'
@@ -52,6 +52,23 @@ async function resolveSession(req: Request): Promise<AuthInfo | null> {
 }
 
 // A user's access is their own switches, plus anything the admin has opened to everyone.
+// A background job acts for the person who started it, with their access as it is at each step, so turning a
+// tool off or disabling the account also stops their running jobs.
+export async function authForOwner(ownerId: string): Promise<AuthInfo | null> {
+  if (ownerId === 'admin') return ADMIN
+  const [user, workspace] = await Promise.all([getActiveUser(ownerId), getWorkspaceAccess()])
+  if (!user) return null
+  return {
+    role: 'user', userId: user.id, username: user.username,
+    permissions: {
+      ...user.permissions,
+      graph8: user.permissions.graph8 || workspace.graph8ForEveryone,
+      gemini: user.permissions.gemini || workspace.geminiForEveryone,
+      claude: user.permissions.claude || workspace.claudeForEveryone,
+    },
+  }
+}
+
 async function userAuth(id: string, sessionVersion: number): Promise<AuthInfo | null> {
   const [user, workspace] = await Promise.all([getSessionUser(id, sessionVersion), getWorkspaceAccess()])
   if (!user) return null

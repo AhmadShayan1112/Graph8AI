@@ -168,6 +168,13 @@ export async function authenticateUser(username: string, password: string) {
 }
 
 // Read on every request so permission changes, disables and deletes take effect immediately.
+// For background jobs, which act for a user without a browser session: the account as it is now.
+export async function getActiveUser(id: string) {
+  if (!ObjectId.isValid(id)) return null
+  const user = await (await users()).findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } })
+  return user && !user.disabled ? toPublic(user) : null
+}
+
 export async function getSessionUser(id: string, sessionVersion: number) {
   if (!ObjectId.isValid(id)) return null
   const user = await (await users()).findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } })

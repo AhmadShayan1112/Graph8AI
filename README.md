@@ -81,6 +81,16 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
   research). **Test key** shows which model answers or Google's exact error; the admin also sees Google's reason in
   error messages. `GEMINI_MODEL` is a server-side default used only when no order is set.
 
+## Background jobs
+
+MVP builds and gap-analysis runs are server-side jobs (`jobs` collection, `server/jobs.ts`), so they keep running
+when the user switches pages, refreshes or closes the tab. Each job moves through steps (MVP: research → plan →
+build; gap analysis: one lead per step). A step runs in its own function call, kept alive after the response with
+Vercel's `waitUntil`, then hands the job to a fresh call through a signed internal route
+(`/api/internal/jobs/:id/run`), so no call exceeds the 5-minute limit. A lock prevents a step from running twice;
+a job whose step went quiet is restarted the next time anyone views their jobs. Failed steps are retried (usage
+limits are waited out); a job that still fails can be resumed. Pages only watch jobs (`/api/jobs`).
+
 ## Assistant and human support
 
 - A chat button (bottom right, on every page of the app) opens the **Gapwise assistant**. It answers questions

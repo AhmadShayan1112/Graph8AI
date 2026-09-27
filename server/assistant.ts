@@ -108,6 +108,12 @@ Every deployed MVP site with its public link.
 Every search you have run with its results. "Open results" brings them back into Discover without searching
 again. Filter by text. The admin can switch between Mine and Everyone.
 
+## Background work
+MVP builds and gap-analysis runs are background jobs on the server: they keep running if you switch pages,
+refresh, close the tab or change device. A chip above **Back** in the menu (top bar on phones) shows every
+running job; click it to open the job. Come back to the Build or Gap analysis page to see progress or the
+result. **Stop** finishes the current step and stops; a job that fails or hits a limit can be resumed.
+
 ## Access and permissions
 Three tools can be switched on or off per user by the admin: Claude (MVP generation), Graph8 (lead search,
 enrichment, market analysis) and Gap analysis (web research on leads). If something says it is "turned off for

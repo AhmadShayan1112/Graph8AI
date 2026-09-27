@@ -1,16 +1,21 @@
 import { useSyncExternalStore } from 'react'
-import { runGapAnalysis, type GapAnalysis, type GapStage } from './api'
+import {
+  cancelJob, listJobs, resumeJob, startGapsJob, isActiveJob,
+  type GapAnalysis, type GapStage, type GapsJob, type Job, type MvpJob,
+} from './api'
 
-// Gap analysis runs live here, outside any page, so they keep going while the person uses the rest of the
-// app. The queue is saved in localStorage: if the tab is closed or refreshed mid-run, the remaining leads
-// come back as a paused run that can be resumed. (The lead in progress still finishes on the server.)
+// Watches the person's background jobs. The work itself runs on the server (see server/jobs.ts), so it keeps
+// going when they switch pages, refresh or close the tab; this store just reflects the latest state for the
+// Gap analysis page and the sidebar chip, polling quickly while something runs and slowly otherwise.
 
 export type Phase = 'starting' | GapStage
 export interface RunProgress { leadId: string; leadName: string; phase: Phase; phaseAt: number; startedAt: number; seen: Phase[] }
 interface QueuedLead { id: string; name: string }
-interface Paused { campaignId: string; campaignName: string; queue: QueuedLead[]; total: number; done: number }
+interface Paused { jobId: string; campaignId: string; campaignName: string; queue: QueuedLead[]; total: number; done: number }
+export interface MvpJobSummary { id: string; title: string; leadId: string | null; campaignId: string | null; step: string; chars: number; action: string }
 
 export interface RunnerState {
+  jobId: string | null
   campaignId: string | null
   campaignName: string
   queue: QueuedLead[]
@@ -20,19 +25,21 @@ export interface RunnerState {
   stopping: boolean
   durations: number[]
   lastError: string
-  // Set while waiting to retry a lead that hit the usage limit.
   retry: { at: number; attempt: number; of: number; reason: string } | null
-  // Finished analyses from this session, keyed `${campaignId}:${leadId}`, so pages can show them.
+  // Kept for the page's merge logic; results now come from the server (the page reloads them as leads finish).
   results: Record<string, GapAnalysis>
   paused: Paused | null
+  // MVP builds running on the server.
+  mvpJobs: MvpJobSummary[]
 }
 
-const KEY = 'gapwise:gap-run'
-let owner = ''
-let state: RunnerState = {
-  campaignId: null, campaignName: '', queue: [], total: 0, done: 0, current: null,
-  stopping: false, durations: [], lastError: '', retry: null, results: {}, paused: null,
+const EMPTY: RunnerState = {
+  jobId: null, campaignId: null, campaignName: '', queue: [], total: 0, done: 0, current: null,
+  stopping: false, durations: [], lastError: '', retry: null, results: {}, paused: null, mvpJobs: [],
 }
+let state: RunnerState = EMPTY
+let owner = ''
+let timer: ReturnType<typeof setTimeout> | null = null
 const listeners = new Set<() => void>()
 
 function set(patch: Partial<RunnerState>) {
@@ -40,124 +47,94 @@ function set(patch: Partial<RunnerState>) {
   listeners.forEach(l => l())
 }
 
-function save(remaining: QueuedLead[] | null) {
+const campaignNameOf = (j: Job) => String(j.title).replace(/^Gap analysis:\s*/, '')
+
+function applyGaps(j: GapsJob | null) {
+  if (!j) {
+    set({ jobId: null, campaignId: null, campaignName: '', queue: [], total: 0, done: 0, current: null, stopping: false, retry: null, paused: null })
+    return
+  }
+  const s = j.state
+  if (isActiveJob(j)) {
+    const current = s.current ? { ...s.current, phase: s.current.phase as Phase, seen: s.current.seen as Phase[] } : null
+    // The lead being researched stays in the server's queue until it finishes; show it as current, not queued.
+    const queue = current ? s.queue.filter(q => q.id !== current.leadId) : s.queue
+    set({
+      jobId: j.id, campaignId: j.campaignId, campaignName: campaignNameOf(j), queue, total: s.total, done: s.done,
+      current, stopping: j.cancelRequested, durations: s.durations ?? [], retry: s.retry ?? null,
+      lastError: s.lastError ?? '', paused: null,
+    })
+  } else if (j.status === 'paused' || j.status === 'failed') {
+    set({
+      jobId: null, current: null, queue: [], retry: null, stopping: false,
+      campaignId: j.campaignId, campaignName: campaignNameOf(j), total: s.total, done: s.done,
+      lastError: j.error || s.lastError || '',
+      paused: s.queue?.length ? { jobId: j.id, campaignId: String(j.campaignId), campaignName: campaignNameOf(j), queue: s.queue, total: s.total, done: s.done } : null,
+    })
+  } else {
+    set({ jobId: null, current: null, queue: [], retry: null, stopping: false, paused: null, done: s.done, total: s.total, lastError: '' })
+  }
+}
+
+async function poll() {
+  if (timer) { clearTimeout(timer); timer = null }
+  if (!owner) return
   try {
-    if (!remaining?.length || !state.campaignId) localStorage.removeItem(KEY)
-    else localStorage.setItem(KEY, JSON.stringify({
-      owner, campaignId: state.campaignId, campaignName: state.campaignName, queue: remaining, total: state.total, done: state.done,
+    const { jobs } = await listJobs({ active: true, limit: 20 })
+    const gaps = (jobs.find(j => j.kind === 'gaps' && isActiveJob(j)) ?? jobs.find(j => j.kind === 'gaps')) as GapsJob | undefined
+    applyGaps(gaps ?? null)
+    const mvps = (jobs.filter(j => j.kind === 'mvp' && isActiveJob(j)) as MvpJob[]).map(j => ({
+      id: j.id, title: j.title, leadId: j.leadId, campaignId: j.campaignId, step: j.step,
+      chars: j.state.build?.chars ?? 0, action: j.state.build?.action ?? '',
     }))
-  } catch { /* storage blocked: the run just can't be resumed after a refresh */ }
+    set({ mvpJobs: mvps })
+  } catch { /* offline or signed out: try again later */ }
+  const busy = isRunning() || state.mvpJobs.length > 0
+  timer = setTimeout(poll, busy ? 2500 : 20_000)
 }
 
-// Warn before leaving the site while a run is going.
-function onBeforeUnload(e: BeforeUnloadEvent) {
-  e.preventDefault()
-  e.returnValue = ''
-}
+export const isRunning = () => !!state.jobId
 
-export const isRunning = () => !!state.current || state.queue.length > 0 || !!state.retry
-
-// Called once the signed-in person is known, to pick up a run their previous visit left unfinished.
+// Called once the signed-in person is known: start watching their jobs.
 export function initRunner(username: string) {
   if (owner === username) return
   owner = username
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY) || 'null')
-    if (saved?.owner === username && saved.queue?.length && !isRunning()) {
-      set({ paused: { campaignId: saved.campaignId, campaignName: saved.campaignName, queue: saved.queue, total: saved.total, done: saved.done } })
-    } else if (saved && saved.owner !== username) {
-      set({ paused: null })
-    }
-  } catch { /* ignore */ }
+  state = EMPTY
+  void poll()
 }
 
-export function startRun(campaign: { id: string; name: string }, leads: QueuedLead[], resumeFrom?: { total: number; done: number }) {
+// Check right away (e.g. after starting an MVP build elsewhere).
+export const refreshRunner = () => { void poll() }
+
+export async function startRun(campaign: { id: string; name: string }, leads: QueuedLead[]) {
   if (isRunning() || !leads.length) return
-  set({
-    campaignId: campaign.id, campaignName: campaign.name,
-    queue: leads.map(l => ({ id: l.id, name: l.name })),
-    total: resumeFrom?.total ?? leads.length, done: resumeFrom?.done ?? 0,
-    stopping: false, lastError: '', paused: null,
-  })
-  save(state.queue)
-  window.addEventListener('beforeunload', onBeforeUnload)
-  void loop()
+  try {
+    const { job } = await startGapsJob(campaign.id, campaign.name, leads.map(l => ({ id: l.id, name: l.name })))
+    applyGaps(job)
+  } catch (err: any) {
+    set({ lastError: err.message, campaignId: campaign.id })
+  }
+  void poll()
 }
 
-export function stopRun() {
-  if (isRunning()) set({ stopping: true })
+export async function stopRun() {
+  if (!state.jobId) return
+  set({ stopping: true })
+  await cancelJob(state.jobId).catch(() => {})
+  void poll()
 }
 
-export function resumeRun() {
+export async function resumeRun() {
   const p = state.paused
   if (!p) return
-  startRun({ id: p.campaignId, name: p.campaignName }, p.queue, { total: p.total, done: p.done })
+  await resumeJob(p.jobId).catch(err => set({ lastError: err.message }))
+  void poll()
 }
 
-export function dismissPaused() {
-  set({ paused: null })
-  save(null)
-}
-
-// When the research service is at its usage limit, wait and try the same lead again: 30 s, 60 s, 90 s…
-const LIMIT_RETRIES = 5
-const retryWaitMs = (attempt: number) => 30_000 * attempt
-
-async function waitUnlessStopped(ms: number) {
-  const until = Date.now() + ms
-  while (Date.now() < until && !state.stopping) await new Promise(r => setTimeout(r, 500))
-}
-
-async function loop() {
-  const campaignId = state.campaignId!
-  let limitRetries = 0
-  while (state.queue.length && !state.stopping) {
-    const [lead, ...rest] = state.queue
-    const startedAt = Date.now()
-    set({ queue: rest, retry: null, current: { leadId: lead.id, leadName: lead.name, phase: 'starting', phaseAt: startedAt, startedAt, seen: ['starting'] } })
-    save([lead, ...rest])
-    try {
-      const analysis = await runGapAnalysis(campaignId, lead.id, stage => {
-        const c = state.current
-        if (c) set({ current: { ...c, phase: stage, phaseAt: Date.now(), seen: [...c.seen, stage] } })
-      })
-      set({
-        results: { ...state.results, [`${campaignId}:${lead.id}`]: analysis },
-        durations: [...state.durations, Date.now() - startedAt].slice(-10),
-        done: state.done + 1,
-        current: null,
-      })
-      limitRetries = 0
-      save(state.queue)
-    } catch (err: any) {
-      if (err?.status === 429 && limitRetries < LIMIT_RETRIES && !state.stopping) {
-        limitRetries++
-        const wait = retryWaitMs(limitRetries)
-        // Put the lead back at the front and try it again after the wait.
-        set({ queue: [lead, ...state.queue], current: null, retry: { at: Date.now() + wait, attempt: limitRetries, of: LIMIT_RETRIES, reason: err.message } })
-        await waitUnlessStopped(wait)
-        set({ retry: null })
-        continue
-      }
-      // A key or quota problem fails every lead the same way, so pause and let the person resume later.
-      const remaining = [lead, ...state.queue]
-      set({
-        lastError: `${lead.name}: ${err.message}`,
-        current: null,
-        queue: [],
-        paused: remaining.length ? { campaignId, campaignName: state.campaignName, queue: remaining, total: state.total, done: state.done } : null,
-      })
-      save(remaining)
-      break
-    }
-  }
-  if (state.stopping && state.queue.length) {
-    set({ paused: { campaignId, campaignName: state.campaignName, queue: state.queue, total: state.total, done: state.done }, queue: [] })
-  } else if (!state.lastError) {
-    save(null)
-  }
-  set({ current: null, stopping: false, retry: null })
-  window.removeEventListener('beforeunload', onBeforeUnload)
+export async function dismissPaused() {
+  const p = state.paused
+  set({ paused: null, lastError: '' })
+  if (p) await cancelJob(p.jobId).catch(() => {})
 }
 
 export function useGapRunner() {

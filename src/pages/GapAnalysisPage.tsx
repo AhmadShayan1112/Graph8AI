@@ -44,7 +44,8 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
 
   // Runs live in the app-wide runner, so they continue while this page is closed.
   const run = useGapRunner()
-  const active = !!run.current || run.queue.length > 0 || !!run.retry
+  // A server job is running (it continues whether or not this page is open).
+  const active = !!run.jobId
   const mine = !!campaign && run.campaignId === campaign.id
   const progress = mine ? run.current : null
   const running = progress?.leadId ?? null
@@ -65,6 +66,15 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
     const t = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(t)
   }, [run.current, run.retry])
+
+  // Each time the server finishes a lead of this campaign, reload the saved analyses.
+  useEffect(() => {
+    if (!campaign || run.campaignId !== campaign.id) return
+    listGapAnalyses(campaign.id)
+      .then(g => setResults(Object.fromEntries(g.analyses.map(a => [a.leadId, a]))))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run.done, run.jobId, campaign?.id])
 
   // During "Analyse all", keep the lead being researched on screen.
   useEffect(() => {

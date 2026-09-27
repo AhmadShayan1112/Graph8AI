@@ -112,38 +112,6 @@ export async function auditWebsite(domain: string) {
   )
 }
 
-// Reads a newline-delimited JSON stream from the server, passing each event to `onEvent`, and returns the
-// final `done` event (or throws the `error` one).
-async function readStream<T>(path: string, body: unknown, onEvent: (e: any) => void): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  })
-  if (!res.ok || !res.body) {
-    const data = await res.json().catch(() => null)
-    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
-    throw new ApiError(data?.error || `API error: ${res.status}`, res.status)
-  }
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (value) buffer += decoder.decode(value, { stream: true })
-    let nl: number
-    while ((nl = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, nl).trim()
-      buffer = buffer.slice(nl + 1)
-      if (!line) continue
-      const event = JSON.parse(line)
-      if (event.type === 'done') return event as T
-      if (event.type === 'error') throw new ApiError(event.error, event.status ?? 502)
-      onEvent(event)
-    }
-    if (done) break
-  }
-  throw new ApiError('The connection closed before the step finished. Try again.', 502)
-}
-
 export type MvpAgent = 'research' | 'strategy' | 'design' | 'build'
 
 // What the researcher, strategist and designer agents produced; the builder turns it into the site.
@@ -172,13 +140,72 @@ export interface MvpPlanResult {
   }
 }
 
-// Step 1: research, strategy and design. `preference` is a solution type, or '' to let the agents decide.
-export const planMvp = (lead: Lead, campaignId: string | undefined, preference: string, onEvent: (e: any) => void) =>
-  readStream<MvpPlanResult>('/mvp/plan', { lead, campaignId, preference: preference || undefined }, onEvent)
+// ── Background jobs: the server does the work; pages start jobs and watch them ──
 
-// Step 2: the builder writes the site from a saved plan; progress events carry the characters written.
-export const buildMvp = (planId: string, onEvent: (e: any) => void) =>
-  readStream<{ mvp: MvpData & { solutionType: string } }>('/mvp/generate', { planId }, onEvent)
+export type JobStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled'
+export interface Job<S = Record<string, any>, O = Record<string, any>> {
+  id: string
+  kind: 'mvp' | 'gaps'
+  status: JobStatus
+  step: string
+  title: string
+  username: string
+  leadId: string | null
+  campaignId: string | null
+  lead: Lead | null
+  state: S
+  output: O | null
+  error: string
+  cancelRequested: boolean
+  createdAt: string
+  updatedAt: string
+  finishedAt: string | null
+}
+export const isActiveJob = (j: Pick<Job, 'status'> | null | undefined) => !!j && (j.status === 'queued' || j.status === 'running')
+
+export interface MvpJobState {
+  agents?: Partial<Record<MvpAgent, 'active' | 'done' | 'skipped'>>
+  research?: Record<string, any> | null
+  researchNote?: string
+  usedGapAnalysis?: boolean
+  planId?: string
+  plan?: MvpPlanResult['plan']
+  images?: MvpPlanResult['images']
+  build?: { chars: number; action: string }
+  researchStartedAt?: string; researchDoneAt?: string
+  planStartedAt?: string; planDoneAt?: string
+  buildStartedAt?: string; buildDoneAt?: string
+}
+export type MvpJob = Job<MvpJobState, MvpData & { solutionType: string }>
+
+export interface GapsJobState {
+  queue: Array<{ id: string; name: string }>
+  total: number
+  done: number
+  durations: number[]
+  current: { leadId: string; leadName: string; phase: string; phaseAt: number; startedAt: number; seen: string[] } | null
+  retry: { at: number; attempt: number; of: number; reason: string } | null
+  lastError: string
+}
+export type GapsJob = Job<GapsJobState>
+
+// `planId` rebuilds from a saved plan (skips research and planning).
+export const startMvpJob = (lead: Lead, campaignId: string | undefined, preference: string, planId?: string) =>
+  apiFetch<{ job: MvpJob }>('/jobs', { method: 'POST', body: JSON.stringify({ kind: 'mvp', lead, campaignId, preference: preference || undefined, planId }) })
+export const startGapsJob = (campaignId: string, campaignName: string, leads: Array<{ id: string; name: string }>) =>
+  apiFetch<{ job: GapsJob }>('/jobs', { method: 'POST', body: JSON.stringify({ kind: 'gaps', campaignId, campaignName, leads }) })
+export const fetchJob = <J extends Job = Job>(id: string) => apiFetch<{ job: J }>(`/jobs/${id}`)
+export const listJobs = <J extends Job = Job>(q: { kind?: 'mvp' | 'gaps'; leadId?: string; campaignId?: string; active?: boolean; limit?: number }) => {
+  const p = new URLSearchParams()
+  if (q.kind) p.set('kind', q.kind)
+  if (q.leadId) p.set('leadId', q.leadId)
+  if (q.campaignId) p.set('campaignId', q.campaignId)
+  if (q.active) p.set('active', '1')
+  if (q.limit) p.set('limit', String(q.limit))
+  return apiFetch<{ jobs: J[] }>(`/jobs?${p}`)
+}
+export const cancelJob = (id: string) => apiFetch<{ job: Job }>(`/jobs/${id}/cancel`, { method: 'POST' })
+export const resumeJob = (id: string) => apiFetch<{ job: Job }>(`/jobs/${id}/resume`, { method: 'POST' })
 
 export async function generateOutreach(
   lead: Lead,

@@ -19,9 +19,10 @@ import GapRunnerChip from './components/GapRunnerChip'
 import { DialogHost } from './components/Dialog'
 import LeadPicker from './components/LeadPicker'
 import { initRunner } from './lib/gapRunner'
+import type { MvpJobSummary } from './lib/gapRunner'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
-import { EMPTY_FILTERS, getSearch, getSupportSummary, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
+import { EMPTY_FILTERS, fetchJob, getSearch, getSupportSummary, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
 import './App.css'
 
@@ -229,6 +230,18 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   // Pick up a gap-analysis run this person's last visit left unfinished.
   useEffect(() => { initRunner(user.username) }, [user.username])
 
+  // Reopen an MVP build that is running on the server, from the sidebar chip on any page.
+  const openBuildJob = (j: MvpJobSummary) => {
+    setMobileMenuOpen(false)
+    if (selectedLead && String(selectedLead.id) === j.leadId) { setPage('build'); return }
+    fetchJob(j.id).then(({ job }) => {
+      if (!job.lead) return
+      setSelectedLead(job.lead)
+      if (activeCampaign?.id !== job.campaignId) setActiveCampaign(null)
+      setPage('build')
+    }).catch(() => {})
+  }
+
   const openGapRun = (campaignId: string) => {
     setGapCampaignId(campaignId)
     setPage('gaps')
@@ -270,7 +283,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           <span className="sidebar-name">Gapwise</span>
         </button>
         <span className="mobile-topbar-user">{user.username}</span>
-        <GapRunnerChip compact onOpen={openGapRun} />
+        <GapRunnerChip compact onOpen={openGapRun} onOpenBuild={openBuildJob} />
       </header>
 
       <div className={`sidebar-wrapper ${mobileMenuOpen ? 'open' : ''}`}>
@@ -280,7 +293,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           leadCount={leads.length}
           canGoBack={canGoBack}
           supportCount={supportCount}
-          runner={<GapRunnerChip onOpen={openGapRun} />}
+          runner={<GapRunnerChip onOpen={openGapRun} onOpenBuild={openBuildJob} />}
         />
       </div>
 
