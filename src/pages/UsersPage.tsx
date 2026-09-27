@@ -39,16 +39,24 @@ const UsersPage: FC = () => {
   }, [])
 
   const setForEveryone = async (key: keyof WorkspaceAccess, on: boolean) => {
-    const what = key === 'graph8ForEveryone' ? 'Graph8 access? Everyone, including new sign-ups, will be able to search and enrich leads'
-      : 'gap analysis? Everyone, including new sign-ups, will be able to run it'
-    if (on && !(await confirmDialog({
-      title: key === 'graph8ForEveryone' ? 'Open Graph8 to every user?' : 'Open gap analysis to every user?',
-      message: key === 'graph8ForEveryone'
-        ? 'Everyone, including new sign-ups, will be able to search and enrich leads with the workspace Graph8 key. You can turn this off at any time.'
-        : 'Everyone, including new sign-ups, will be able to run gap analysis with the workspace key. You can turn this off at any time.',
-      confirmLabel: 'Turn on for everyone',
-      tone: 'info',
-    }))) return
+    const ask: Record<keyof WorkspaceAccess, { title: string; message: string; tone: 'info' | 'default' }> = {
+      graph8ForEveryone: {
+        title: 'Open Graph8 to every user?',
+        message: 'Everyone, including new sign-ups, will be able to search and enrich leads with the workspace Graph8 key. You can turn this off at any time.',
+        tone: 'info',
+      },
+      geminiForEveryone: {
+        title: 'Open gap analysis to every user?',
+        message: 'Everyone, including new sign-ups, will be able to run gap analysis with the workspace key. You can turn this off at any time.',
+        tone: 'info',
+      },
+      claudeForEveryone: {
+        title: 'Let every user build MVPs with Claude?',
+        message: 'Everyone, including new sign-ups, will be able to generate MVP sites with the workspace Claude token or API key. Every build uses Claude credits, so keep an eye on usage. You can turn this off at any time.',
+        tone: 'default',
+      },
+    }
+    if (on && !(await confirmDialog({ ...ask[key], confirmLabel: 'Turn on for everyone' }))) return
     setAccessBusy(true)
     setError('')
     try {
@@ -60,11 +68,16 @@ const UsersPage: FC = () => {
     }
   }
 
-  const everyone: Partial<Permissions> = { graph8: !!access?.graph8ForEveryone, gemini: !!access?.geminiForEveryone }
-  const openToAll = [access?.graph8ForEveryone && 'Graph8', access?.geminiForEveryone && 'Gap analysis'].filter(Boolean)
+  const everyone: Partial<Permissions> = {
+    graph8: !!access?.graph8ForEveryone, gemini: !!access?.geminiForEveryone, claude: !!access?.claudeForEveryone,
+  }
+  const openToAll = [
+    access?.claudeForEveryone && 'Claude', access?.graph8ForEveryone && 'Graph8', access?.geminiForEveryone && 'Gap analysis',
+  ].filter(Boolean)
   const EVERYONE_SWITCHES: Array<{ key: keyof WorkspaceAccess; label: string; help: string }> = [
     { key: 'graph8ForEveryone', label: 'Graph8 for everyone', help: 'Every user, including new sign-ups, can search, enrich and analyse leads.' },
     { key: 'geminiForEveryone', label: 'Gap analysis for everyone', help: 'Every user, including new sign-ups, can run gap analysis (uses the Gemini key).' },
+    { key: 'claudeForEveryone', label: 'Claude for everyone', help: 'Every user, including new sign-ups, can build MVP sites with Claude. Each build uses Claude credits.' },
   ]
 
   const replace = (u: AppUser) => setUsers(list => list?.map(x => (x.id === u.id ? u : x)) ?? null)
@@ -116,7 +129,9 @@ const UsersPage: FC = () => {
               </span>
             </label>
           ))}
-          <div className="settings-card-help">Claude stays per user, because MVP generation spends credits on every build.</div>
+          {access?.claudeForEveryone && (
+            <div className="settings-message bad">Claude is open to everyone: every MVP build by any user spends the workspace’s Claude credits.</div>
+          )}
         </section>
 
         <AddUser onCreated={u => setUsers(list => [...(list ?? []), u].sort((a, b) => a.username.localeCompare(b.username)))} />

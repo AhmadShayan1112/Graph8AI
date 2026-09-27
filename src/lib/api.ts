@@ -184,7 +184,7 @@ export interface AppUser {
   updatedAt: string
 }
 
-export interface WorkspaceAccess { graph8ForEveryone: boolean; geminiForEveryone: boolean }
+export interface WorkspaceAccess { graph8ForEveryone: boolean; geminiForEveryone: boolean; claudeForEveryone: boolean }
 export const getWorkspaceAccess = () => apiFetch<WorkspaceAccess>('/users/access')
 export const setWorkspaceAccess = (access: Partial<WorkspaceAccess>) =>
   apiFetch<WorkspaceAccess>('/users/access', { method: 'PUT', body: JSON.stringify(access) })

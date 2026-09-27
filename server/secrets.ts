@@ -20,6 +20,7 @@ interface SettingsDoc {
   // Workspace-wide access the admin grants to every user on top of their own switches.
   graph8ForEveryone?: boolean
   geminiForEveryone?: boolean
+  claudeForEveryone?: boolean
 }
 
 const settings = async () => (await getDb()).collection<SettingsDoc>('settings')
@@ -81,15 +82,16 @@ export async function getGraph8Key() {
 
 // Checked on every request, so a short per-instance cache avoids a DB read each time.
 // A change is immediate on this instance and reaches the others within 15 seconds.
-export interface WorkspaceAccess { graph8ForEveryone: boolean; geminiForEveryone: boolean }
+export interface WorkspaceAccess { graph8ForEveryone: boolean; geminiForEveryone: boolean; claudeForEveryone: boolean }
 let accessCache: { value: WorkspaceAccess; at: number } | null = null
 
 export async function getWorkspaceAccess() {
   if (accessCache && Date.now() - accessCache.at < 15_000) return accessCache.value
-  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { graph8ForEveryone: 1, geminiForEveryone: 1 } })
+  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { graph8ForEveryone: 1, geminiForEveryone: 1, claudeForEveryone: 1 } })
   const value: WorkspaceAccess = {
     graph8ForEveryone: doc?.graph8ForEveryone === true,
     geminiForEveryone: doc?.geminiForEveryone === true,
+    claudeForEveryone: doc?.claudeForEveryone === true,
   }
   accessCache = { value, at: Date.now() }
   return value
@@ -100,6 +102,7 @@ export async function setWorkspaceAccess(access: Partial<WorkspaceAccess>) {
   const $set: Partial<WorkspaceAccess> = {}
   if (typeof access.graph8ForEveryone === 'boolean') $set.graph8ForEveryone = access.graph8ForEveryone
   if (typeof access.geminiForEveryone === 'boolean') $set.geminiForEveryone = access.geminiForEveryone
+  if (typeof access.claudeForEveryone === 'boolean') $set.claudeForEveryone = access.claudeForEveryone
   await (await settings()).updateOne({ _id: 'app' }, { $set }, { upsert: true })
   accessCache = null
   return getWorkspaceAccess()

@@ -106,8 +106,9 @@ your account", ask the admin. Viewing saved results never needs a tool switched 
 
 const ADMIN_GUIDE = `
 ## Admin: Users  [#/users]
-- "Access for everyone": "Graph8 for everyone" and "Gap analysis for everyone" open that tool to every user,
-  including new sign-ups, on top of their own switches. Claude is always per user because every build spends credits.
+- "Access for everyone": "Graph8 for everyone", "Gap analysis for everyone" and "Claude for everyone" open that
+  tool to every user, including new sign-ups, on top of their own switches. Claude for everyone means every user's
+  MVP builds spend the workspace's Claude credits, so the page warns while it is on.
 - "Add a user" with a temporary password and chosen tools. Per user: switch Claude, Graph8, Gap analysis;
   Reset password (signs them out); Disable/Enable; Delete (also deletes their campaigns and history).
 - Changes apply on the user's next action (up to 15 s for the "for everyone" switches).

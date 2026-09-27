@@ -155,14 +155,15 @@ app.get('/api/users/access', async (_req, res) => {
 })
 
 app.put('/api/users/access', async (req, res) => {
-  const { graph8ForEveryone, geminiForEveryone } = req.body ?? {}
+  const { graph8ForEveryone, geminiForEveryone, claudeForEveryone } = req.body ?? {}
   const valid = (v: unknown) => v === undefined || typeof v === 'boolean'
-  if (!valid(graph8ForEveryone) || !valid(geminiForEveryone) || (graph8ForEveryone === undefined && geminiForEveryone === undefined)) {
-    res.status(400).json({ error: 'Send graph8ForEveryone and/or geminiForEveryone as true or false' })
+  if (![graph8ForEveryone, geminiForEveryone, claudeForEveryone].every(valid)
+    || [graph8ForEveryone, geminiForEveryone, claudeForEveryone].every(v => v === undefined)) {
+    res.status(400).json({ error: 'Send graph8ForEveryone, geminiForEveryone and/or claudeForEveryone as true or false' })
     return
   }
   try {
-    res.json(await setWorkspaceAccess({ graph8ForEveryone, geminiForEveryone }))
+    res.json(await setWorkspaceAccess({ graph8ForEveryone, geminiForEveryone, claudeForEveryone }))
   } catch (err: any) {
     console.error('[users] access update failed:', err.message)
     res.status(503).json({ error: settingsError(err) })

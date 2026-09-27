@@ -59,6 +59,7 @@ async function userAuth(id: string, sessionVersion: number): Promise<AuthInfo | 
     ...user.permissions,
     graph8: user.permissions.graph8 || workspace.graph8ForEveryone,
     gemini: user.permissions.gemini || workspace.geminiForEveryone,
+    claude: user.permissions.claude || workspace.claudeForEveryone,
   }
   return { role: 'user', userId: user.id, username: user.username, permissions }
 }
