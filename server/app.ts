@@ -17,7 +17,7 @@ import {
 } from './graph8.js'
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
 import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
-import { deleteSecret, secretStatus, setSecret, type SecretName } from './secrets.js'
+import { deleteSecret, getWorkspaceAccess, secretStatus, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
 import { generateSiteHtml, publicClaudeError } from './claude.js'
 import { getDb } from './db.js'
 import {
@@ -95,6 +95,26 @@ app.delete('/api/settings/:name', async (req, res) => {
     res.json(await secretStatus())
   } catch (err: any) {
     console.error('[settings] delete failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+// Workspace-wide access: e.g. let every user use Graph8 regardless of their own switch.
+app.get('/api/users/access', async (_req, res) => {
+  try {
+    res.json(await getWorkspaceAccess())
+  } catch (err: any) {
+    console.error('[users] access read failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+app.put('/api/users/access', async (req, res) => {
+  if (typeof req.body?.graph8ForEveryone !== 'boolean') { res.status(400).json({ error: 'graph8ForEveryone must be true or false' }); return }
+  try {
+    res.json(await setWorkspaceAccess({ graph8ForEveryone: req.body.graph8ForEveryone }))
+  } catch (err: any) {
+    console.error('[users] access update failed:', err.message)
     res.status(503).json({ error: settingsError(err) })
   }
 })

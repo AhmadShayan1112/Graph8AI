@@ -9,6 +9,8 @@ interface SettingsDoc {
   graph8ApiKeyUpdatedAt?: Date
   claudeToken?: string
   claudeTokenUpdatedAt?: Date
+  // Workspace-wide access the admin grants to every user on top of their own switches.
+  graph8ForEveryone?: boolean
 }
 
 const settings = async () => (await getDb()).collection<SettingsDoc>('settings')
@@ -60,4 +62,22 @@ export async function getGraph8Key() {
   const value = (await readSecret('graph8ApiKey').catch(() => null)) ?? process.env.G8_API_KEY ?? null
   graph8Cache = { value, at: Date.now() }
   return value
+}
+
+// Checked on every request, so a short per-instance cache avoids a DB read each time.
+// A change is immediate on this instance and reaches the others within 15 seconds.
+let accessCache: { value: { graph8ForEveryone: boolean }; at: number } | null = null
+
+export async function getWorkspaceAccess() {
+  if (accessCache && Date.now() - accessCache.at < 15_000) return accessCache.value
+  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { graph8ForEveryone: 1 } })
+  const value = { graph8ForEveryone: doc?.graph8ForEveryone === true }
+  accessCache = { value, at: Date.now() }
+  return value
+}
+
+export async function setWorkspaceAccess(access: { graph8ForEveryone: boolean }) {
+  await (await settings()).updateOne({ _id: 'app' }, { $set: { graph8ForEveryone: access.graph8ForEveryone } }, { upsert: true })
+  accessCache = null
+  return getWorkspaceAccess()
 }

@@ -2080,6 +2080,10 @@ body {
 .user-row-message { flex-basis: 100%; }
 .user-empty { padding: 12px 0; border-top: 1px solid #EFEFEC; }
 .access-note { margin-bottom: 16px; }
+.everyone-row { align-items: flex-start; gap: 12px; }
+.everyone-row .toggle { margin-top: 2px; }
+.everyone-help { display: block; margin-top: 2px; }
+.user-perm-note { color: #8A8E97; font-size: 12px; }
 .history-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; max-width: 720px; }
 .history-search { flex: 1 1 220px; min-width: 0; }
 .history-scope { flex: 0 0 180px; }

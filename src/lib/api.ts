@@ -180,6 +180,10 @@ export interface AppUser {
   updatedAt: string
 }
 
+export interface WorkspaceAccess { graph8ForEveryone: boolean }
+export const getWorkspaceAccess = () => apiFetch<WorkspaceAccess>('/users/access')
+export const setWorkspaceAccess = (access: WorkspaceAccess) =>
+  apiFetch<WorkspaceAccess>('/users/access', { method: 'PUT', body: JSON.stringify(access) })
 export const listUsers = () => apiFetch<{ users: AppUser[] }>('/users')
 export const createUser = (username: string, password: string, permissions: Permissions) =>
   apiFetch<{ user: AppUser }>('/users', { method: 'POST', body: JSON.stringify({ username, password, permissions }) })

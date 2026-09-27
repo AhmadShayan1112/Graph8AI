@@ -5,6 +5,7 @@ import {
   authenticateUser, getSessionUser, normalizeUsername, signUp as createAccount, validatePassword, validateUsername,
   type Permission, type Permissions,
 } from './users.js'
+import { getWorkspaceAccess } from './secrets.js'
 
 // The admin signs in as "admin" with ADMIN_PASSWORD and manages keys and users.
 // Users are created by the admin and can only use the API keys the admin has switched on for them.
@@ -50,9 +51,12 @@ async function resolveSession(req: Request): Promise<AuthInfo | null> {
   return userAuth(m[1], Number(m[2]))
 }
 
+// A user's access is their own switches, plus anything the admin has opened to everyone.
 async function userAuth(id: string, sessionVersion: number): Promise<AuthInfo | null> {
-  const user = await getSessionUser(id, sessionVersion)
-  return user && { role: 'user', userId: user.id, username: user.username, permissions: user.permissions }
+  const [user, workspace] = await Promise.all([getSessionUser(id, sessionVersion), getWorkspaceAccess()])
+  if (!user) return null
+  const permissions = { ...user.permissions, graph8: user.permissions.graph8 || workspace.graph8ForEveryone }
+  return { role: 'user', userId: user.id, username: user.username, permissions }
 }
 
 function cookieAttrs(maxAgeSec: number) {
