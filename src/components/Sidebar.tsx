@@ -49,9 +49,11 @@ interface SidebarProps {
   leadCount?: number
   canGoBack?: boolean
   supportCount?: number
+  // Live status of a background job (gap analysis), shown above the bottom links.
+  runner?: ReactNode
 }
 
-const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, supportCount }) => {
+const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, supportCount, runner }) => {
   const { user } = useSession()
   const isAdmin = user.role === 'admin'
 
@@ -94,6 +96,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
       </nav>
 
       <div className="sidebar-bottom-links">
+        {runner && <div className="sidebar-runner">{runner}</div>}
         <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('back')} disabled={!canGoBack}>
           <Icon name="back" />
           Back

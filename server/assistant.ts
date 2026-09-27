@@ -180,7 +180,7 @@ export async function assistantChat(req: Request, res: Response) {
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
-  const send = (event: Record<string, unknown>) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`) }
+  const send = (event: Record<string, unknown>) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(event)}\n`) }
   try {
     await streamGeminiChat(system, turns, text => send({ type: 'delta', text }))
     send({ type: 'done' })

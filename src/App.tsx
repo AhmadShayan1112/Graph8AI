@@ -15,6 +15,8 @@ import GapAnalysisPage from './pages/GapAnalysisPage'
 import DashboardPage from './pages/DashboardPage'
 import SupportPage from './pages/SupportPage'
 import AssistantWidget from './components/AssistantWidget'
+import GapRunnerChip from './components/GapRunnerChip'
+import { initRunner } from './lib/gapRunner'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
 import { EMPTY_FILTERS, getSearch, getSupportSummary, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
@@ -213,6 +215,15 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin])
 
+  // Pick up a gap-analysis run this person's last visit left unfinished.
+  useEffect(() => { initRunner(user.username) }, [user.username])
+
+  const openGapRun = (campaignId: string) => {
+    setGapCampaignId(campaignId)
+    setPage('gaps')
+    setMobileMenuOpen(false)
+  }
+
   // Links inside assistant replies (#/page or #/page/id) open that page here.
   const goToHash = (hash: string) => {
     const [p, id] = hash.replace(/^#\/?/, '').split('/')
@@ -248,6 +259,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           <span className="sidebar-name">Gapwise</span>
         </button>
         <span className="mobile-topbar-user">{user.username}</span>
+        <GapRunnerChip compact onOpen={openGapRun} />
       </header>
 
       <div className={`sidebar-wrapper ${mobileMenuOpen ? 'open' : ''}`}>
@@ -257,6 +269,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           leadCount={leads.length}
           canGoBack={canGoBack}
           supportCount={supportCount}
+          runner={<GapRunnerChip onOpen={openGapRun} />}
         />
       </div>
 

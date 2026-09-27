@@ -1752,6 +1752,8 @@ body {
   .mobile-topbar-brand { padding: 0; }
   .mobile-topbar-user {
     margin-left: auto;
+    flex-shrink: 1;
+    min-width: 0;
     max-width: 40%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2521,6 +2523,31 @@ body {
 .support-thread .assist-body { overflow: visible; }
 .support-empty { padding: 24px; }
 @media (max-width: 900px) { .support-layout { grid-template-columns: 1fr; } }
+
+/* ─── Background gap-analysis run ─── */
+.runner-chip {
+  display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; text-align: left;
+  border: 1px solid oklch(0.88 0.05 262); border-radius: 10px; background: #F5F7FE;
+  font: inherit; color: inherit; cursor: pointer; min-width: 0;
+}
+.runner-chip:hover { border-color: oklch(0.7 0.12 262); }
+.runner-chip.paused { background: #FFF8E6; border-color: #EBD9A3; }
+.runner-chip-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.runner-chip-title { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.runner-chip-pct { font-size: 12px; font-weight: 600; color: oklch(0.45 0.16 262); font-variant-numeric: tabular-nums; }
+.runner-chip-sub { font-size: 11.5px; color: #6B7080; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runner-chip-bar { height: 4px; border-radius: 2px; background: #E1E5F5; overflow: hidden; }
+.runner-chip-bar span { display: block; height: 100%; border-radius: 2px; background: oklch(0.52 0.16 262); transition: width 0.5s linear; }
+.runner-dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.52 0.16 262); animation: pulse 1.4s infinite; }
+.runner-chip.compact { padding: 5px 9px; gap: 3px; border-radius: 8px; max-width: 150px; }
+.runner-chip.compact .runner-chip-title { font-size: 11.5px; }
+.sidebar-runner { display: flex; flex-direction: column; margin-bottom: 10px; }
+.sidebar-runner:empty { display: none; }
+.gap-elsewhere { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.gap-paused { background: #FFFBF0; border-color: #EBD9A3; }
+.gap-paused-actions { display: flex; gap: 8px; }
+.gap-bar span.is-still::after { display: none; }
+@media (prefers-reduced-motion: reduce) { .runner-dot { animation: none; } .runner-chip-bar span { transition: none; } }
 
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 

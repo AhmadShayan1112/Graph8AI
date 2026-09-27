@@ -694,8 +694,9 @@ app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
-  const send = (event: Record<string, unknown>) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`) }
-  // Keeps the connection visibly alive through the long web-research step.
+  const send = (event: Record<string, unknown>) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(event)}\n`) }
+  // Keeps the connection visibly alive through the long web-research step. If the person closes the tab,
+  // the run still finishes and is saved; only the progress updates stop.
   const heartbeat = setInterval(() => send({ type: 'tick' }), 5000)
   try {
     const analysis = await runGapAnalysis(getAuth(res), found.campaignId, found.lead, stage => send({ type: 'stage', stage }))

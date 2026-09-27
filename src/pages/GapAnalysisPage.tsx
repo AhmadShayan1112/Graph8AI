@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState, type FC } from 'react'
+import { useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
-  getCampaign, listCampaigns, listGapAnalyses, runGapAnalysis,
+  getCampaign, listCampaigns, listGapAnalyses,
   type Campaign, type CampaignLead, type CampaignSummary, type GapAnalysis, type GapLevel, type GapStage,
 } from '../lib/api'
+import {
+  averageMs, dismissPaused, formatDuration as seconds, leadPercent, overallPercent, resumeRun, startRun, stopRun,
+  useGapRunner, type Phase,
+} from '../lib/gapRunner'
 import { useSession } from '../components/LoginGate'
 
 interface Props {
@@ -21,33 +25,11 @@ const OFFER_LABEL: Record<string, string> = {
 }
 const LEVEL_LABEL: Record<GapLevel, string> = { high: 'High', medium: 'Medium', low: 'Low' }
 
-// Progress through one lead. Stage changes come from the server as they happen; within a stage the bar
-// eases toward that stage's ceiling, so it keeps moving but never claims a step that hasn't finished.
-type Phase = 'starting' | GapStage
-interface Progress { leadId: string; phase: Phase; phaseAt: number; startedAt: number; seen: Phase[] }
-
 const STEPS: Array<{ key: GapStage; label: string }> = [
   { key: 'graph8', label: 'Reading the Graph8 company record' },
   { key: 'research', label: 'Researching the business on the web' },
   { key: 'saving', label: 'Writing the gaps and prospect profile' },
 ]
-
-function progressPct(p: Progress, now: number, expectedMs: number): number {
-  const t = Math.max(0, now - p.phaseAt)
-  const ease = (from: number, to: number, tau: number) => from + (to - from) * (1 - Math.exp(-t / tau))
-  switch (p.phase) {
-    case 'starting': return ease(0, 5, 800)
-    case 'graph8': return ease(5, 15, 1500)
-    case 'research': return ease(15, 92, expectedMs / 2.2)
-    case 'saving': return ease(93, 98, 600)
-    default: return 0
-  }
-}
-
-const seconds = (ms: number) => {
-  const s = Math.round(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
-}
 
 const fitClass = (n: number) => (n >= 70 ? 'good' : n >= 40 ? 'fair' : 'poor')
 
@@ -56,26 +38,42 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   const [campaigns, setCampaigns] = useState<CampaignSummary[] | null>(null)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [leads, setLeads] = useState<CampaignLead[]>([])
-  const [results, setResults] = useState<Record<string, GapAnalysis>>({})
+  const [savedResults, setResults] = useState<Record<string, GapAnalysis>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [progress, setProgress] = useState<Progress | null>(null)
   const [now, setNow] = useState(Date.now())
-  // How long finished leads took this session; drives the time-left estimate and the bar's pacing.
-  const [durations, setDurations] = useState<number[]>([])
-  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
-  const running = progress?.leadId ?? null
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const stopRef = useRef(false)
   const detailRef = useRef<HTMLDivElement>(null)
+
+  // Runs live in the app-wide runner, so they continue while this page is closed.
+  const run = useGapRunner()
+  const active = !!run.current || run.queue.length > 0
+  const mine = !!campaign && run.campaignId === campaign.id
+  const progress = mine ? run.current : null
+  const running = progress?.leadId ?? null
+  const batch = mine && active && run.total > 1 ? { done: run.done, total: run.total } : null
+  const paused = run.paused && campaign && run.paused.campaignId === campaign.id ? run.paused : null
+  // Saved analyses plus any the runner finished while this page was open or closed.
+  const results = useMemo(() => {
+    if (!campaign) return savedResults
+    const prefix = `${campaign.id}:`
+    const fresh = Object.fromEntries(Object.entries(run.results).filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k.slice(prefix.length), v]))
+    return { ...savedResults, ...fresh }
+  }, [savedResults, run.results, campaign])
 
   const canRun = user.permissions.gemini
 
   useEffect(() => {
-    if (!progress) return
+    if (!run.current) return
     const t = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(t)
-  }, [progress])
+  }, [run.current])
+
+  // During "Analyse all", keep the lead being researched on screen.
+  useEffect(() => {
+    if (batch && progress) setSelected(progress.leadId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress?.leadId])
 
   useEffect(() => {
     listCampaigns().then(r => {
@@ -104,53 +102,25 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
     return () => { cancelled = true }
   }, [campaignId])
 
-  const analyse = async (lead: CampaignLead) => {
-    if (!campaign) return false
-    const startedAt = Date.now()
-    setProgress({ leadId: lead.id, phase: 'starting', phaseAt: startedAt, startedAt, seen: ['starting'] })
-    setNow(startedAt)
-    setError('')
-    try {
-      const analysis = await runGapAnalysis(campaign.id, lead.id, stage =>
-        setProgress(p => p && { ...p, phase: stage, phaseAt: Date.now(), seen: [...p.seen, stage] }))
-      setResults(r => ({ ...r, [lead.id]: analysis }))
-      setDurations(d => [...d, Date.now() - startedAt].slice(-10))
-      return true
-    } catch (err: any) {
-      setError(`${lead.name}: ${err.message}`)
-      return false
-    } finally {
-      setProgress(null)
-    }
-  }
-
-  const analyseOne = async (lead: CampaignLead) => {
+  const analyseOne = (lead: CampaignLead) => {
+    if (!campaign) return
     setSelected(lead.id)
-    await analyse(lead)
+    startRun(campaign, [lead])
   }
 
-  // One lead at a time: each is a web-research call, and a sequence keeps within Gemini's rate limits.
-  const analyseAll = async () => {
+  // One lead at a time: each is a web-research call, and a sequence keeps within the rate limits.
+  const analyseAll = () => {
+    if (!campaign) return
     const todo = leads.filter(l => !results[l.id])
     if (!todo.length) return
-    if (!confirm(`Run gap analysis on ${todo.length} lead${todo.length > 1 ? 's' : ''}? Each one is a web research run and takes up to a minute.`)) return
-    stopRef.current = false
-    setBatch({ done: 0, total: todo.length })
-    for (let i = 0; i < todo.length; i++) {
-      if (stopRef.current) break
-      setSelected(todo[i].id)
-      const ok = await analyse(todo[i])
-      setBatch({ done: i + 1, total: todo.length })
-      // A key or quota problem will fail every lead the same way, so stop early.
-      if (!ok) break
-    }
-    setBatch(null)
+    if (!confirm(`Run gap analysis on ${todo.length} lead${todo.length > 1 ? 's' : ''}? Each one is a web research run and takes up to a minute. You can keep using Gapwise while it runs.`)) return
+    startRun(campaign, todo)
   }
 
   const analysed = leads.filter(l => results[l.id])
-  const avgMs = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0
-  const leadPct = progress ? progressPct(progress, now, avgMs || 30_000) : 0
-  const overallPct = batch ? ((batch.done + leadPct / 100) / batch.total) * 100 : 0
+  const avgMs = averageMs(run)
+  const leadPct = progress ? leadPercent(progress, now, avgMs || 30_000) : 0
+  const overallPct = batch ? overallPercent(run, now) : 0
   const timeLeft = batch && avgMs && progress
     ? Math.max(0, avgMs * (batch.total - batch.done) - (now - progress.startedAt))
     : null
@@ -191,16 +161,16 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
         </div>
         {!!campaigns?.length && (
           <div className="page-header-actions an-actions">
-            <select className="input an-select" value={campaignId ?? ''} onChange={e => onCampaignId(e.target.value || null)} aria-label="Campaign" disabled={!!batch}>
+            <select className="input an-select" value={campaignId ?? ''} onChange={e => onCampaignId(e.target.value || null)} aria-label="Campaign">
               {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}{c.mine ? '' : ` (${c.username})`}</option>)}
             </select>
             {batch ? (
-              <button className="btn-secondary" onClick={() => { stopRef.current = true }}>Stop after this lead</button>
+              <button className="btn-secondary" onClick={stopRun} disabled={run.stopping}>{run.stopping ? 'Stopping after this lead…' : 'Stop after this lead'}</button>
             ) : (
               <button
                 className="btn-accent"
                 onClick={analyseAll}
-                disabled={!canRun || !!running || leads.length === analysed.length}
+                disabled={!canRun || active || leads.length === analysed.length}
                 title={canRun ? '' : 'Gap analysis is turned off for your account'}
               >
                 {leads.length && leads.length === analysed.length ? 'All leads analysed' : `Analyse all (${leads.length - analysed.length})`}
@@ -214,6 +184,28 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
         <div className="settings-alert">Gap analysis is turned off for your account. You can read saved analyses; ask the admin to turn it on to run new ones.</div>
       )}
       {error && <div className="settings-alert">{error}</div>}
+      {mine && !active && run.lastError && <div className="settings-alert">{run.lastError}</div>}
+
+      {active && !mine && (
+        <div className="gap-progress gap-elsewhere">
+          <span>A gap analysis is running for <strong>{run.campaignName}</strong>. New runs can start when it finishes.</span>
+          <button className="dash-link" onClick={() => run.campaignId && onCampaignId(run.campaignId)}>View it</button>
+        </div>
+      )}
+
+      {paused && !active && (
+        <div className="gap-progress gap-paused" role="status">
+          <div className="gap-progress-row">
+            <span className="gap-progress-title">Stopped with {paused.queue.length} lead{paused.queue.length === 1 ? '' : 's'} left</span>
+            <span className="gap-progress-pct">{paused.done} / {paused.total}</span>
+          </div>
+          <div className="gap-bar"><span className="is-still" style={{ width: `${(paused.done / paused.total) * 100}%` }} /></div>
+          <div className="gap-paused-actions">
+            <button className="btn-accent" onClick={resumeRun} disabled={!canRun}>Resume</button>
+            <button className="btn-secondary" onClick={dismissPaused}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {batch && (
         <div className="gap-progress" role="status" aria-live="polite">
@@ -317,7 +309,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
                     </div>
                     <div className="gap-detail-actions">
                       <button className="btn-secondary" onClick={() => onAudit(campaign, lead)}>Audit</button>
-                      <button className={gap ? 'btn-secondary' : 'btn-accent'} onClick={() => analyseOne(lead)} disabled={!canRun || !!running || !!batch}>
+                      <button className={gap ? 'btn-secondary' : 'btn-accent'} onClick={() => analyseOne(lead)} disabled={!canRun || active}>
                         {running === lead.id ? 'Researching…' : gap ? 'Re-run' : 'Run gap analysis'}
                       </button>
                     </div>
