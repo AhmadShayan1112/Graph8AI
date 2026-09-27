@@ -332,7 +332,7 @@ app.post('/api/leads/discover', async (req, res) => {
           total: companyRes.pagination.total,
           leads,
           campaignId,
-        }).catch(err => { console.error('[history] save failed:', err.message); null })
+        }).catch(err => { console.error('[history] save failed:', err.message); return null })
       : null
     if (campaignId) {
       await saveCampaignLeads(campaignId, leads, searchId).catch(err => console.error('[campaigns] saving leads failed:', err.message))
