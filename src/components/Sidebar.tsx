@@ -90,10 +90,13 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
 
   return (
     <aside className="sidebar">
-      <button className="sidebar-brand brand-link" onClick={() => onNavigate('landing')} title="Go to the landing page">
-        <LogoMark size={26} />
-        <span className="sidebar-name">Gapwise</span>
-      </button>
+      <div className="sidebar-top">
+        <button className="sidebar-brand brand-link" onClick={() => onNavigate('landing')} title="Go to the landing page">
+          <LogoMark size={26} />
+          <span className="sidebar-name">Gapwise</span>
+        </button>
+        <ThemeToggle compact />
+      </div>
 
       <nav className="sidebar-nav">
         {GROUPS.map(g => (
@@ -119,7 +122,6 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
           <Icon name="tour" />
           Take the tour
         </button>
-        <ThemeToggle />
         <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('back')} disabled={!canGoBack}>
           <Icon name="back" />
           Back

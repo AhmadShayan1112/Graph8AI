@@ -3186,3 +3186,7 @@ input, textarea, select { color: inherit; }
 }
 .update-banner .btn-primary { flex: none; }
 @keyframes updateIn { from { opacity: 0; } }
+
+/* Theme switch sits in the top bar, beside the logo. */
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 4px; }
+@media (max-width: 768px) { .sidebar-top .theme-toggle-compact { display: none; } }
