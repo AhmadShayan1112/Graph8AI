@@ -4,6 +4,7 @@ import { LogoMark } from './Logo'
 
 // Line icons drawn on a 24px grid; they inherit the item's text color.
 const ICONS: Record<string, ReactNode> = {
+  dashboard: <><rect x="3.5" y="3.5" width="7" height="8" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="5" rx="1.5" /><rect x="13.5" y="11.5" width="7" height="9" rx="1.5" /><rect x="3.5" y="14.5" width="7" height="6" rx="1.5" /></>,
   analysis: <><path d="M4 20V11" /><path d="M10 20V5" /><path d="M16 20v-6" /><path d="M21 20H3" /></>,
   campaigns: <><path d="M5 21V4" /><path d="M5 4h12l-2.5 4L17 12H5" /></>,
   discover: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></>,
@@ -27,7 +28,7 @@ const Icon: FC<{ name: string }> = ({ name }) => (
 )
 
 const GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }> }> = [
-  { title: 'Plan', items: [{ id: 'analysis', label: 'Analysis' }, { id: 'campaigns', label: 'Campaigns' }] },
+  { title: 'Plan', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'analysis', label: 'Analysis' }, { id: 'campaigns', label: 'Campaigns' }] },
   {
     title: 'Prospect',
     items: [

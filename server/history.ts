@@ -98,3 +98,7 @@ export async function deleteSearchesInCampaign(campaignId: ObjectId) {
 export async function deleteSearchesFor(ownerId: string) {
   await (await searches()).deleteMany({ ownerId })
 }
+
+export async function countSearches(auth: AuthInfo) {
+  return (await searches()).countDocuments(scope(auth))
+}

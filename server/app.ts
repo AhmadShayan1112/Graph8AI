@@ -23,13 +23,13 @@ import { getDb } from './db.js'
 import {
   createUser, deleteUser, listUsers, normalizeUsername, parsePermissions, updateUser, validatePassword, validateUsername,
 } from './users.js'
-import { deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } from './history.js'
+import { countSearches, deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } from './history.js'
 import {
   campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
   getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
-import { listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
+import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
 import { GeminiError } from './gemini.js'
 
 export const app = express()
@@ -707,6 +707,49 @@ app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (
   } finally {
     clearInterval(heartbeat)
     res.end()
+  }
+})
+
+// Dashboard: one read that summarises everything this person can see (the admin sees the whole workspace).
+app.get('/api/dashboard', async (_req, res) => {
+  const auth = getAuth(res)
+  try {
+    const campaigns = await listCampaigns(auth)
+    const ids = campaigns.map(c => new ObjectId(c.id))
+    const names = new Map(campaigns.map(c => [c.id, c.name]))
+    const siteCol = await sites()
+    const [searchCount, searches, gaps, siteCount, recentSites, keys] = await Promise.all([
+      countSearches(auth),
+      listSearches(auth),
+      gapStatsFor(ids),
+      siteCol.countDocuments({}),
+      siteCol.find({}, { projection: { html: 0 } }).sort({ updatedAt: -1 }).limit(5).toArray(),
+      auth.role === 'admin' ? secretStatus() : Promise.resolve(null),
+    ])
+    res.json({
+      scope: auth.role === 'admin' ? 'workspace' : 'mine',
+      totals: {
+        campaigns: campaigns.length,
+        leads: campaigns.reduce((n, c) => n + c.leadCount, 0),
+        searches: searchCount,
+        gapAnalyses: gaps.count,
+        sites: siteCount,
+      },
+      campaigns: campaigns.slice(0, 5).map(c => ({
+        id: c.id, name: c.name, target: c.target, leadCount: c.leadCount, searchCount: c.searchCount,
+        lastSearchAt: c.lastSearchAt, username: c.username, mine: c.mine,
+      })),
+      topProspects: gaps.top.map(p => ({ ...p, campaignName: names.get(p.campaignId) ?? '' })),
+      recentSearches: searches.slice(0, 5).map(s => ({
+        id: s.id, prompt: s.prompt, filters: s.filters, leadCount: s.leadCount, total: s.total,
+        createdAt: s.createdAt, campaignName: s.campaignId ? names.get(s.campaignId) ?? '' : '', username: s.username, mine: s.mine,
+      })),
+      sites: recentSites.map(s => ({ slug: s._id, leadName: s.leadName, mvpType: s.mvpType, updatedAt: s.updatedAt })),
+      keys: keys && { graph8: keys.graph8.configured, claude: keys.claude.configured, gemini: keys.gemini.configured },
+    })
+  } catch (err: any) {
+    console.error('[dashboard]', err.message)
+    res.status(503).json({ error: 'Could not load the dashboard.' })
   }
 })
 

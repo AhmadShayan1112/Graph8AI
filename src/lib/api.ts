@@ -311,3 +311,24 @@ export async function runGapAnalysis(campaignId: string, leadId: string, onStage
   }
   throw new ApiError('The gap analysis stopped before it finished. Try again.', 502)
 }
+
+export interface Dashboard {
+  scope: 'workspace' | 'mine'
+  totals: { campaigns: number; leads: number; searches: number; gapAnalyses: number; sites: number }
+  campaigns: Array<{
+    id: string; name: string; target: CampaignTarget; leadCount: number; searchCount: number
+    lastSearchAt: string | null; username: string; mine: boolean
+  }>
+  topProspects: Array<{
+    campaignId: string; campaignName: string; leadId: string; leadName: string
+    fitScore: number; offer: string; topGap: string; createdAt: string
+  }>
+  recentSearches: Array<{
+    id: string; prompt: string; filters: DiscoverFilters; leadCount: number; total: number
+    createdAt: string; campaignName: string; username: string; mine: boolean
+  }>
+  sites: DeployedSite[]
+  keys: { graph8: boolean; claude: boolean; gemini: boolean } | null
+}
+
+export const getDashboard = () => apiFetch<Dashboard>('/dashboard')

@@ -12,61 +12,118 @@ import HistoryPage from './pages/HistoryPage'
 import CampaignsPage from './pages/CampaignsPage'
 import AnalysisPage from './pages/AnalysisPage'
 import GapAnalysisPage from './pages/GapAnalysisPage'
+import DashboardPage from './pages/DashboardPage'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
-import { EMPTY_FILTERS, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
+import { EMPTY_FILTERS, getSearch, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
 import './App.css'
 
+// The app lives under `#/page[/id]`, so a refresh or bookmark reopens the same page. The site root
+// without a hash is the landing page. (Hash routes never reach the server, whose `/:slug` paths are
+// the deployed MVP sites.)
+const PAGES = new Set(['dashboard', 'analysis', 'campaigns', 'discover', 'gaps', 'audit', 'build', 'outreach', 'pipeline', 'history', 'users', 'settings'])
+const PAGES_WITH_ID = new Set(['campaigns', 'analysis', 'gaps'])
+
+function readHash() {
+  const [page, id] = window.location.hash.replace(/^#\/?/, '').split('/')
+  return PAGES.has(page) ? { page, id: id ? decodeURIComponent(id) : null } : null
+}
+
 function App() {
-  const [view, setView] = useState<'landing' | 'app'>('landing')
+  const [view, setView] = useState<'landing' | 'app'>(() => (readHash() ? 'app' : 'landing'))
+
+  useEffect(() => {
+    const onHash = () => setView(readHash() ? 'app' : 'landing')
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   if (view === 'landing') {
-    return <LandingPage onEnterApp={() => setView('app')} />
+    return <LandingPage onEnterApp={() => { window.location.hash = '#/dashboard'; setView('app') }} />
   }
 
   return (
     <LoginGate>
-      <Workspace />
+      <Workspace
+        onLanding={() => {
+          window.history.pushState(null, '', window.location.pathname + window.location.search)
+          setView('landing')
+          window.scrollTo(0, 0)
+        }}
+      />
     </LoginGate>
   )
 }
 
+// Work in progress survives a refresh for the rest of the browser session.
+const SAVED = 'gapwise:workspace'
+function loadSaved(): Partial<{ leads: Lead[]; selectedLead: Lead | null; mvpType: string; siteUrl: string; activeCampaign: Campaign | null }> {
+  try { return JSON.parse(sessionStorage.getItem(SAVED) || '{}') } catch { return {} }
+}
+
 // Rendered inside LoginGate so it can read the signed-in user's role and key access.
-function Workspace() {
+function Workspace({ onLanding }: { onLanding: () => void }) {
   const { user, refresh } = useSession()
-  // Work starts from a campaign.
-  const [page, setPage] = useState('campaigns')
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-  const [mvpType, setMvpType] = useState('booking-page')
+  const [initial] = useState(() => ({ route: readHash(), saved: loadSaved() }))
+  const idFor = (p: string) => (initial.route?.page === p ? initial.route.id : null)
+  const [page, setPage] = useState(initial.route?.page ?? 'dashboard')
+  const [leads, setLeads] = useState<Lead[]>(initial.saved.leads ?? [])
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(initial.saved.selectedLead ?? null)
+  const [mvpType, setMvpType] = useState(initial.saved.mvpType ?? 'booking-page')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [siteUrl, setSiteUrl] = useState<string | undefined>()
+  const [siteUrl, setSiteUrl] = useState<string | undefined>(initial.saved.siteUrl)
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
-  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
-  const [openCampaignId, setOpenCampaignId] = useState<string | null>(null)
-  const [analysisCampaignId, setAnalysisCampaignId] = useState<string | null>(null)
-  const [gapCampaignId, setGapCampaignId] = useState<string | null>(null)
+  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(initial.saved.activeCampaign ?? null)
+  const [openCampaignId, setOpenCampaignId] = useState<string | null>(idFor('campaigns'))
+  const [analysisCampaignId, setAnalysisCampaignId] = useState<string | null>(idFor('analysis'))
+  const [gapCampaignId, setGapCampaignId] = useState<string | null>(idFor('gaps'))
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SAVED, JSON.stringify({ leads, selectedLead, mvpType, siteUrl, activeCampaign }))
+    } catch { /* storage full or blocked: a refresh just won't restore */ }
+  }, [leads, selectedLead, mvpType, siteUrl, activeCampaign])
+
+  // Keep the address bar in step with the page, so refresh, bookmarks and the browser's Back work.
+  const routeId = page === 'campaigns' ? openCampaignId : page === 'analysis' ? analysisCampaignId : page === 'gaps' ? gapCampaignId : null
+  useEffect(() => {
+    const hash = `#/${page}${PAGES_WITH_ID.has(page) && routeId ? `/${encodeURIComponent(routeId)}` : ''}`
+    if (window.location.hash !== hash) window.history.pushState(null, '', hash)
+  }, [page, routeId])
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = readHash()
+      if (!r) return
+      if (r.page === 'campaigns') setOpenCampaignId(r.id)
+      if (r.page === 'analysis') setAnalysisCampaignId(r.id)
+      if (r.page === 'gaps') setGapCampaignId(r.id)
+      setPage(r.page)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   // Pages visited, so Back can return to the previous one.
-  const history = useRef<string[]>([])
+  const visited = useRef<string[]>([])
   const previous = useRef(page)
   const goingBack = useRef(false)
   const [canGoBack, setCanGoBack] = useState(false)
 
   useEffect(() => {
     if (goingBack.current) goingBack.current = false
-    else if (previous.current !== page) history.current = [...history.current, previous.current].slice(-50)
+    else if (previous.current !== page) visited.current = [...visited.current, previous.current].slice(-50)
     previous.current = page
-    setCanGoBack(history.current.length > 0)
+    setCanGoBack(visited.current.length > 0)
   }, [page])
 
   const goBack = () => {
     // Skip lead pages whose lead is no longer selected; they would render empty.
     const needsLead = new Set(['audit', 'build', 'outreach'])
     let target: string | undefined
-    while ((target = history.current.pop()) && needsLead.has(target) && !selectedLead) { /* skip */ }
-    setCanGoBack(history.current.length > 0)
+    while ((target = visited.current.pop()) && needsLead.has(target) && !selectedLead) { /* skip */ }
+    setCanGoBack(visited.current.length > 0)
     if (!target) return
     goingBack.current = true
     setPage(target)
@@ -122,7 +179,11 @@ function Workspace() {
 
   const handleNavigate = (id: string) => {
     if (id === 'back') { goBack(); return }
-    if (id === 'logout') { logout().finally(() => window.location.reload()); return }
+    if (id === 'logout') {
+      try { sessionStorage.removeItem(SAVED) } catch { /* ignore */ }
+      logout().finally(() => window.location.replace(window.location.pathname))
+      return
+    }
     // Pick up any access change the admin made since the last page.
     refresh()
     // The Campaigns menu item always lands on the list.
@@ -132,6 +193,11 @@ function Workspace() {
   }
 
   const isAdmin = user.role === 'admin'
+
+  // A link to an admin page opened by a user falls back to the dashboard instead of a blank screen.
+  useEffect(() => {
+    if (!isAdmin && (page === 'settings' || page === 'users')) setPage('dashboard')
+  }, [page, isAdmin])
 
   // Stop the page behind the open mobile menu from scrolling.
   useEffect(() => {
@@ -171,6 +237,24 @@ function Workspace() {
       )}
 
       <main className="main-content">
+        {page === 'dashboard' && (
+          <DashboardPage
+            onNavigate={handleNavigate}
+            onLanding={onLanding}
+            onOpenCampaign={openCampaign}
+            onOpenGaps={id => { setGapCampaignId(id); setPage('gaps') }}
+            onOpenSearch={id => { getSearch(id).then(r => handleOpenSearch(r.search)).catch(() => setPage('history')) }}
+          />
+        )}
+        {['audit', 'build', 'outreach'].includes(page) && !selectedLead && (
+          <div className="page-content fade-in">
+            <div className="an-callout">
+              <div className="an-callout-title">Choose a lead first</div>
+              <div className="text-muted">Open a lead from Discover, a campaign or gap analysis, and it will show here.</div>
+              <button className="btn-primary" onClick={() => handleNavigate('discover')}>Go to Discover</button>
+            </div>
+          </div>
+        )}
         {page === 'discover' && (
           <DiscoverPage
             leads={leads}

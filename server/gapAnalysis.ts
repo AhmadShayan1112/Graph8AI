@@ -214,3 +214,28 @@ export async function listGapAnalyses(campaignId: ObjectId) {
 export async function deleteGapAnalysesFor(campaignIds: ObjectId[]) {
   if (campaignIds.length) await (await gapAnalyses()).deleteMany({ campaignId: { $in: campaignIds } })
 }
+
+// Count and the best-fit prospects across the given campaigns, for the dashboard.
+export async function gapStatsFor(campaignIds: ObjectId[], limit = 6) {
+  const col = await gapAnalyses()
+  const filter = { campaignId: { $in: campaignIds } }
+  const [count, top] = await Promise.all([
+    col.countDocuments(filter),
+    col.find(filter, { projection: { campaignId: 1, leadId: 1, leadName: 1, 'result.prospect': 1, 'result.gaps': { $slice: 1 }, createdAt: 1 } })
+      .sort({ 'result.prospect.fitScore': -1, createdAt: -1 })
+      .limit(limit)
+      .toArray(),
+  ])
+  return {
+    count,
+    top: top.map(d => ({
+      campaignId: String(d.campaignId),
+      leadId: d.leadId,
+      leadName: d.leadName,
+      fitScore: d.result?.prospect?.fitScore ?? 0,
+      offer: d.result?.prospect?.recommendedOffer ?? '',
+      topGap: d.result?.gaps?.[0]?.title ?? '',
+      createdAt: d.createdAt,
+    })),
+  }
+}
