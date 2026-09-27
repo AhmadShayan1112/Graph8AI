@@ -4,7 +4,6 @@ import { useSession } from '../components/LoginGate'
 
 interface Props {
   onNavigate: (page: string) => void
-  onLanding: () => void
   onOpenCampaign: (id: string | null) => void
   onOpenGaps: (campaignId: string) => void
   onOpenSearch: (searchId: string) => void
@@ -33,7 +32,7 @@ function greeting() {
 
 const fitClass = (n: number) => (n >= 70 ? 'good' : n >= 40 ? 'fair' : 'poor')
 
-const DashboardPage: FC<Props> = ({ onNavigate, onLanding, onOpenCampaign, onOpenGaps, onOpenSearch }) => {
+const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOpenSearch }) => {
   const { user } = useSession()
   const [data, setData] = useState<Dashboard | null>(null)
   const [error, setError] = useState('')
@@ -90,12 +89,6 @@ const DashboardPage: FC<Props> = ({ onNavigate, onLanding, onOpenCampaign, onOpe
           </div>
         </div>
         <div className="page-header-actions">
-          <button className="btn-secondary dash-home" onClick={onLanding}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M19 12H5" /><path d="m11 6-6 6 6 6" />
-            </svg>
-            Landing page
-          </button>
           <button className="btn-secondary" onClick={() => onNavigate('discover')}>Search leads</button>
           <button className="btn-primary" onClick={() => onOpenCampaign(null)}>New campaign</button>
         </div>

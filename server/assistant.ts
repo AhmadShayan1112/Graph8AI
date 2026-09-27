@@ -17,8 +17,8 @@ Build & deploy -> Outreach.
 - Sign in / Sign up tabs on the sign-in page. Sign up creates an account immediately (no approval) and signs
   you in. New accounts start with every tool switched off until the admin turns them on.
 - The admin signs in with username "admin" and the admin password set on the server.
-- Refreshing keeps you on the same page. Sign out is at the bottom of the menu. The Gapwise logo goes to the
-  landing page; the Dashboard also has a "Landing page" button.
+- Refreshing keeps you on the same page. Sign out is at the bottom of the menu. Clicking the Gapwise logo (top of
+  the menu, or the top bar on phones) goes to the landing page.
 
 ## Menu (left sidebar; on phones, the menu button at the top)
 Plan: Dashboard, Analysis, Campaigns. Prospect: Discover, Gap analysis, Audit, Build & deploy, Outreach.

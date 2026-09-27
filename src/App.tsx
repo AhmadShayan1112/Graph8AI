@@ -287,7 +287,6 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         {page === 'dashboard' && (
           <DashboardPage
             onNavigate={handleNavigate}
-            onLanding={onLanding}
             onOpenCampaign={openCampaign}
             onOpenGaps={id => { setGapCampaignId(id); setPage('gaps') }}
             onOpenSearch={id => { getSearch(id).then(r => handleOpenSearch(r.search)).catch(() => setPage('history')) }}
