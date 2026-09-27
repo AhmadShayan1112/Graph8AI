@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import LandingPage from './pages/LandingPage'
 import DiscoverPage, { restoreDiscover } from './pages/DiscoverPage'
@@ -24,13 +24,13 @@ function App() {
 
   return (
     <LoginGate>
-      <Workspace onLanding={() => setView('landing')} />
+      <Workspace />
     </LoginGate>
   )
 }
 
 // Rendered inside LoginGate so it can read the signed-in user's role and key access.
-function Workspace({ onLanding }: { onLanding: () => void }) {
+function Workspace() {
   const { user, refresh } = useSession()
   // Work starts from a campaign.
   const [page, setPage] = useState('campaigns')
@@ -42,6 +42,31 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(null)
+
+  // Pages visited, so Back can return to the previous one.
+  const history = useRef<string[]>([])
+  const previous = useRef(page)
+  const goingBack = useRef(false)
+  const [canGoBack, setCanGoBack] = useState(false)
+
+  useEffect(() => {
+    if (goingBack.current) goingBack.current = false
+    else if (previous.current !== page) history.current = [...history.current, previous.current].slice(-50)
+    previous.current = page
+    setCanGoBack(history.current.length > 0)
+  }, [page])
+
+  const goBack = () => {
+    // Skip lead pages whose lead is no longer selected; they would render empty.
+    const needsLead = new Set(['audit', 'build', 'outreach'])
+    let target: string | undefined
+    while ((target = history.current.pop()) && needsLead.has(target) && !selectedLead) { /* skip */ }
+    setCanGoBack(history.current.length > 0)
+    if (!target) return
+    goingBack.current = true
+    setPage(target)
+    setMobileMenuOpen(false)
+  }
 
   const handleSelectLead = (lead: Lead) => {
     setSelectedLead(lead)
@@ -86,7 +111,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   }
 
   const handleNavigate = (id: string) => {
-    if (id === 'landing') { onLanding(); return }
+    if (id === 'back') { goBack(); return }
     if (id === 'logout') { logout().finally(() => window.location.reload()); return }
     // Pick up any access change the admin made since the last page.
     refresh()
@@ -127,6 +152,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           active={page}
           onNavigate={handleNavigate}
           leadCount={leads.length}
+          canGoBack={canGoBack}
         />
       </div>
 

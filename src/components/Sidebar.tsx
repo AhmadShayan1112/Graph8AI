@@ -22,9 +22,10 @@ interface SidebarProps {
   active: string
   onNavigate: (id: string) => void
   leadCount?: number
+  canGoBack?: boolean
 }
 
-const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount }) => {
+const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack }) => {
   const { user } = useSession()
   const isAdmin = user.role === 'admin'
   return (
@@ -71,8 +72,8 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount }) => {
             </button>
           </>
         )}
-        <button className="sidebar-landing-link" onClick={() => onNavigate('landing')}>
-          ← Marketing site
+        <button className="sidebar-landing-link" onClick={() => onNavigate('back')} disabled={!canGoBack}>
+          ← Back
         </button>
         <button className="sidebar-landing-link" onClick={() => onNavigate('logout')}>
           Sign out

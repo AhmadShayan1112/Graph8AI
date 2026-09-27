@@ -2158,4 +2158,5 @@ body {
 .deploy-link { color: oklch(0.5 0.16 262); word-break: break-all; }
 .sidebar-bottom-links { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
 .sidebar-bottom-links .sidebar-landing-link { margin-top: 0; }
+.sidebar-landing-link:disabled { opacity: 0.4; cursor: default; }
 a.browser-open-btn, a.visit-btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
