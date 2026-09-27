@@ -13,16 +13,18 @@ import CampaignsPage from './pages/CampaignsPage'
 import AnalysisPage from './pages/AnalysisPage'
 import GapAnalysisPage from './pages/GapAnalysisPage'
 import DashboardPage from './pages/DashboardPage'
+import SupportPage from './pages/SupportPage'
+import AssistantWidget from './components/AssistantWidget'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
-import { EMPTY_FILTERS, getSearch, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
+import { EMPTY_FILTERS, getSearch, getSupportSummary, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
 import './App.css'
 
 // The app lives under `#/page[/id]`, so a refresh or bookmark reopens the same page. The site root
 // without a hash is the landing page. (Hash routes never reach the server, whose `/:slug` paths are
 // the deployed MVP sites.)
-const PAGES = new Set(['dashboard', 'analysis', 'campaigns', 'discover', 'gaps', 'audit', 'build', 'outreach', 'pipeline', 'history', 'users', 'settings'])
+const PAGES = new Set(['dashboard', 'analysis', 'campaigns', 'discover', 'gaps', 'audit', 'build', 'outreach', 'pipeline', 'history', 'users', 'settings', 'support'])
 const PAGES_WITH_ID = new Set(['campaigns', 'analysis', 'gaps'])
 
 function readHash() {
@@ -197,8 +199,32 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   // A link to an admin page opened by a user falls back to the dashboard instead of a blank screen.
   useEffect(() => {
-    if (!isAdmin && (page === 'settings' || page === 'users')) setPage('dashboard')
+    if (!isAdmin && (page === 'settings' || page === 'users' || page === 'support')) setPage('dashboard')
   }, [page, isAdmin])
+
+  // Open support requests, shown on the admin's Support menu item.
+  const [supportCount, setSupportCount] = useState(0)
+  const refreshSupportCount = () => { if (isAdmin) getSupportSummary().then(r => setSupportCount(r.waiting)).catch(() => {}) }
+  useEffect(() => {
+    if (!isAdmin) return
+    refreshSupportCount()
+    const t = setInterval(refreshSupportCount, 60_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin])
+
+  // Links inside assistant replies (#/page or #/page/id) open that page here.
+  const goToHash = (hash: string) => {
+    const [p, id] = hash.replace(/^#\/?/, '').split('/')
+    if (!PAGES.has(p)) return
+    const target = id ? decodeURIComponent(id) : null
+    if (p === 'campaigns') setOpenCampaignId(target)
+    if (p === 'analysis' && target) setAnalysisCampaignId(target)
+    if (p === 'gaps' && target) setGapCampaignId(target)
+    refresh()
+    setPage(p)
+    setMobileMenuOpen(false)
+  }
 
   // Stop the page behind the open mobile menu from scrolling.
   useEffect(() => {
@@ -230,6 +256,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           onNavigate={handleNavigate}
           leadCount={leads.length}
           canGoBack={canGoBack}
+          supportCount={supportCount}
         />
       </div>
 
@@ -337,7 +364,10 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         )}
         {page === 'settings' && isAdmin && <SettingsPage />}
         {page === 'users' && isAdmin && <UsersPage />}
+        {page === 'support' && isAdmin && <SupportPage onCountChange={refreshSupportCount} />}
       </main>
+
+      <AssistantWidget page={page} onRoute={goToHash} />
     </div>
   )
 }

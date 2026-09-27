@@ -14,6 +14,7 @@ const ICONS: Record<string, ReactNode> = {
   outreach: <><path d="M21 3 10 14" /><path d="m21 3-6.5 18-4.5-7-7-4.5L21 3Z" /></>,
   pipeline: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></>,
   history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  support: <><path d="M4 13a8 8 0 0 1 16 0" /><rect x="3" y="13" width="4" height="6" rx="1.5" /><rect x="17" y="13" width="4" height="6" rx="1.5" /><path d="M20 19c0 1.5-2 2.5-5 2.5h-2" /></>,
   users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" /><path d="M18 14.8c1.9.7 3.1 2.4 3.5 5.2" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1" /></>,
   back: <><path d="M19 12H5" /><path d="m11 6-6 6 6 6" /></>,
@@ -47,9 +48,10 @@ interface SidebarProps {
   onNavigate: (id: string) => void
   leadCount?: number
   canGoBack?: boolean
+  supportCount?: number
 }
 
-const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack }) => {
+const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, supportCount }) => {
   const { user } = useSession()
   const isAdmin = user.role === 'admin'
 
@@ -84,6 +86,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
         {isAdmin && (
           <div className="sidebar-group">
             <div className="sidebar-group-title">Admin</div>
+            {item('support', 'Support', supportCount ? <span className="sidebar-item-count sidebar-item-alert">{supportCount}</span> : null)}
             {item('users', 'Users')}
             {item('settings', 'Settings')}
           </div>

@@ -90,3 +90,54 @@ export function extractJson(text: string) {
     throw new GeminiError('The research result could not be read. Try again.', 502)
   }
 }
+
+// Streaming chat for the in-app assistant: no web search, a system instruction, and the reply
+// delivered piece by piece through `onText` as the model writes it.
+export async function streamGeminiChat(
+  system: string,
+  turns: Array<{ role: 'user' | 'model'; text: string }>,
+  onText: (text: string) => void,
+) {
+  const key = await getGeminiKey()
+  if (!key) throw new GeminiError('The assistant is not set up yet. Ask the admin to add the research API key in Settings.', 400)
+
+  const res = await fetch(`${BASE}/models/${encodeURIComponent(MODEL())}:streamGenerateContent?alt=sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1200 },
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => null)
+    console.error(`[assistant] ${res.status} (model ${MODEL()}): ${String(body?.error?.message ?? res.statusText).slice(0, 300)}`)
+    if (res.status === 401 || res.status === 403 || res.status === 400) throw new GeminiError('The assistant is not available right now. Ask the admin to check the research API key.', 502)
+    if (res.status === 429) throw new GeminiError('The assistant is busy. Wait a minute and try again.', 429)
+    throw new GeminiError('The assistant could not answer right now. Try again shortly.', 502)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let wrote = false
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim()
+      buffer = buffer.slice(nl + 1)
+      if (!line.startsWith('data:')) continue
+      try {
+        const chunk = JSON.parse(line.slice(5))
+        const text = (chunk?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? '').join('')
+        if (text) { wrote = true; onText(text) }
+      } catch { /* partial or keep-alive line */ }
+    }
+    if (done) break
+  }
+  if (!wrote) throw new GeminiError('The assistant came back empty. Try asking again.', 502)
+}

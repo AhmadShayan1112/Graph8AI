@@ -332,3 +332,69 @@ export interface Dashboard {
 }
 
 export const getDashboard = () => apiFetch<Dashboard>('/dashboard')
+
+export interface ChatMessage { role: 'user' | 'assistant'; content: string }
+
+// Streams the assistant's reply: `onText` receives each new piece as it is written.
+export async function askAssistant(messages: ChatMessage[], page: string, onText: (text: string) => void, signal?: AbortSignal) {
+  const res = await fetch(`${BASE}/assistant/chat`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, page }),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => null)
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    throw new ApiError(body?.error || `API error: ${res.status}`, res.status)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim()
+      buffer = buffer.slice(nl + 1)
+      if (!line) continue
+      const event = JSON.parse(line)
+      if (event.type === 'delta') onText(event.text)
+      else if (event.type === 'done') return
+      else if (event.type === 'error') throw new ApiError(event.error, 502)
+    }
+    if (done) return
+  }
+}
+
+export type TicketStatus = 'open' | 'answered' | 'closed'
+export interface TicketSummary {
+  id: string
+  username: string
+  mine: boolean
+  subject: string
+  page: string
+  status: TicketStatus
+  unread: boolean
+  lastMessage: { from: 'user' | 'admin'; text: string; at: string } | null
+  messageCount: number
+  createdAt: string
+  updatedAt: string
+}
+export interface Ticket extends TicketSummary {
+  messages: Array<{ from: 'user' | 'admin'; name: string; text: string; at: string }>
+  transcript: ChatMessage[]
+}
+
+export const getSupportSummary = () => apiFetch<{ waiting: number }>('/support/summary')
+export const listTickets = (status?: TicketStatus) =>
+  apiFetch<{ tickets: TicketSummary[] }>(`/support/tickets${status ? `?status=${status}` : ''}`)
+export const getTicket = (id: string) => apiFetch<{ ticket: Ticket }>(`/support/tickets/${id}`)
+export const createTicket = (message: string, transcript: ChatMessage[], page: string) =>
+  apiFetch<{ ticket: Ticket }>('/support/tickets', { method: 'POST', body: JSON.stringify({ message, transcript, page }) })
+export const replyToTicket = (id: string, text: string) =>
+  apiFetch<{ ticket: Ticket }>(`/support/tickets/${id}/replies`, { method: 'POST', body: JSON.stringify({ text }) })
+export const setTicketStatus = (id: string, status: 'open' | 'closed') =>
+  apiFetch<{ ticket: Ticket }>(`/support/tickets/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })

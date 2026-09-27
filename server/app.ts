@@ -31,6 +31,8 @@ import {
 } from './campaigns.js'
 import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
 import { GeminiError } from './gemini.js'
+import { assistantChat } from './assistant.js'
+import { createTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
 
 export const app = express()
 app.disable('x-powered-by')
@@ -167,7 +169,7 @@ app.patch('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
   try {
     if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
-    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id)])
+    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id), deleteTicketsFor(req.params.id)])
     res.json({ deleted: true })
   } catch (err: any) {
     console.error('[users] delete failed:', err.message)
@@ -709,6 +711,17 @@ app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (
     res.end()
   }
 })
+
+// In-app help assistant, open to every signed-in person (rate-limited per person).
+app.post('/api/assistant/chat', assistantChat)
+
+// Human support requests: users see their own, the admin sees and answers all of them.
+app.get('/api/support/summary', supportSummary)
+app.get('/api/support/tickets', listTickets)
+app.post('/api/support/tickets', createTicket)
+app.get('/api/support/tickets/:id', getTicket)
+app.post('/api/support/tickets/:id/replies', replyToTicket)
+app.patch('/api/support/tickets/:id', setTicketStatus)
 
 // Dashboard: one read that summarises everything this person can see (the admin sees the whole workspace).
 app.get('/api/dashboard', async (_req, res) => {

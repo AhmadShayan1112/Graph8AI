@@ -54,6 +54,17 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 - Market numbers are stored in `campaign_analysis` and only recomputed when someone clicks
   **Refresh from Graph8**, which needs Graph8 access.
 
+## Assistant and human support
+
+- A chat button (bottom right, on every page of the app) opens the **Gapwise assistant**. It answers questions
+  about using Gapwise from a built-in product guide (`server/assistant.ts`), tailored to the person's role, tool
+  access and current page, streams its replies, and links straight to pages. It runs on the same research key as
+  gap analysis, never names the AI provider, and is limited to 30 messages per person per 10 minutes.
+- **Talk to a person** in the assistant sends the question and the chat so far to the admin as a support
+  request (`support_tickets`). The person follows it under **My requests**; a red dot shows new replies.
+- The admin answers in **Support** (menu shows the open count): filter Open / Answered / Closed, read the
+  request with its chat and page, reply, close or reopen.
+
 ## Local development
 
 ```bash
