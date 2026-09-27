@@ -332,3 +332,14 @@ export async function leadsForCampaigns(ids: ObjectId[], limit = 3000) {
   const docs = await leads.find({ campaignId: { $in: ids } }).sort({ addedAt: -1 }).limit(limit).toArray()
   return docs.map(d => ({ campaignId: String(d.campaignId), lead: d.lead as Record<string, any> }))
 }
+
+// Leads saved per week (weeks starting Monday) across campaigns, for the dashboard chart.
+export async function leadsPerWeek(ids: ObjectId[], weeks = 8) {
+  const { leads } = await collections()
+  const since = new Date(Date.now() - weeks * 7 * 24 * 3600 * 1000)
+  const rows = await leads.aggregate<{ _id: Date; n: number }>([
+    { $match: { campaignId: { $in: ids }, addedAt: { $gte: since } } },
+    { $group: { _id: { $dateTrunc: { date: '$addedAt', unit: 'week', startOfWeek: 'monday' } }, n: { $sum: 1 } } },
+  ]).toArray()
+  return rows.map(r => ({ week: r._id, count: r.n }))
+}

@@ -402,3 +402,8 @@ async function gapsStep(job: JobDoc, auth: AuthInfo): Promise<string> {
 export async function deleteJobsFor(ownerId: string) {
   await (await jobs()).deleteMany({ ownerId })
 }
+
+// Finished MVP builds, for the dashboard pipeline (the admin counts the whole workspace).
+export async function countBuiltMvps(auth: AuthInfo) {
+  return (await jobs()).countDocuments({ kind: 'mvp', status: 'done', ...(auth.role === 'admin' ? {} : { ownerId: ownerOf(auth) }) })
+}

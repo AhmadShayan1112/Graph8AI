@@ -429,6 +429,11 @@ export interface Dashboard {
   sites: DeployedSite[]
   keys: { graph8: boolean; claude: boolean; gemini: boolean } | null
   temperature: LeadTemperature | null
+  charts?: {
+    weekly: Array<{ week: string; count: number }>
+    funnel: Array<{ stage: string; count: number }>
+    campaignLeads: Array<{ id: string; name: string; count: number }>
+  }
 }
 
 export type Temp = 'hot' | 'warm' | 'cold'
@@ -444,6 +449,7 @@ export interface LeadTemperature {
     campaignId: string; campaignName: string; leadId: string; name: string; city: string
     offer: string; points: number; temp: Temp; reasons: string[]
   }>
+  offers?: Array<{ offer: string; count: number }>
 }
 
 export const getDashboard = () => apiFetch<Dashboard>('/dashboard')

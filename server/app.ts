@@ -21,7 +21,7 @@ import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, s
 import { deleteSecret, getGeminiModel, getWorkspaceAccess, secretStatus, setGeminiModel, setSecret, setWorkspaceAccess, type SecretName } from './secrets.js'
 import { loadPlan } from './mvpAgents.js'
 import {
-  activeJobOf, cancelJob, createJob, deleteJobsFor, getJob, keepAlive, listJobs, resumeJob, runStep, validRunSignature,
+  activeJobOf, cancelJob, countBuiltMvps, createJob, deleteJobsFor, getJob, keepAlive, listJobs, resumeJob, runStep, validRunSignature,
 } from './jobs.js'
 import { getDb } from './db.js'
 import {
@@ -31,7 +31,7 @@ import { countSearches, deleteSearch, deleteSearchesFor, getSearch, listSearches
 import {
   campaignForSearch, campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
-  getMarketAnalysis, saveMarketAnalysis, getCampaignLead, leadsForCampaigns, type CampaignTarget, type MarketAnalysis,
+  getMarketAnalysis, saveMarketAnalysis, getCampaignLead, leadsForCampaigns, leadsPerWeek, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
 import { fitsFor, gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
 import { GeminiError, listGeminiModels, modelInUse, resetModelChoice, testGemini } from './gemini.js'
@@ -853,6 +853,8 @@ async function leadTemperature(campaigns: Array<{ id: string; name: string }>) {
   const [saved, fits] = await Promise.all([leadsForCampaigns(ids), fitsFor(ids)])
   const names = new Map(campaigns.map(c => [c.id, c.name]))
   const counts = { hot: 0, warm: 0, cold: 0 }
+  const offers = new Map<string, number>()
+  for (const g of fits.values()) if (g.offer) offers.set(g.offer, (offers.get(g.offer) ?? 0) + 1)
   const byCampaign = new Map<string, { hot: number; warm: number; cold: number }>()
   let notAnalysed = 0
   let notEnriched = 0
@@ -875,6 +877,8 @@ async function leadTemperature(campaigns: Array<{ id: string; name: string }>) {
     byCampaign: [...byCampaign].map(([id, c]) => ({ id, name: names.get(id) ?? '', ...c }))
       .sort((a, b) => b.hot - a.hot || b.warm - a.warm).slice(0, 6),
     hottest: scored.filter(s => s.temp !== 'cold').sort((a, b) => b.points - a.points).slice(0, 8),
+    // What gap analysis recommends across these leads, most common first.
+    offers: [...offers].sort((a, b) => b[1] - a[1]).map(([offer, count]) => ({ offer, count })),
   }
 }
 
@@ -894,6 +898,10 @@ app.get('/api/dashboard', async (_req, res) => {
       siteCol.find({}, { projection: { html: 0 } }).sort({ updatedAt: -1 }).limit(5).toArray(),
       auth.role === 'admin' ? secretStatus() : Promise.resolve(null),
       leadTemperature(campaigns).catch(err => { console.error('[dashboard] temperature failed:', err.message); return null }),
+    ])
+    const [weekly, mvpsBuilt] = await Promise.all([
+      leadsPerWeek(campaigns.map(c => new ObjectId(c.id))).catch(() => []),
+      countBuiltMvps(auth).catch(() => 0),
     ])
     res.json({
       scope: auth.role === 'admin' ? 'workspace' : 'mine',
@@ -916,6 +924,26 @@ app.get('/api/dashboard', async (_req, res) => {
       sites: recentSites.map(s => ({ slug: s._id, leadName: s.leadName, mvpType: s.mvpType, updatedAt: s.updatedAt })),
       keys: keys && { graph8: keys.graph8.configured, claude: keys.claude.configured, gemini: keys.gemini.configured },
       temperature,
+      charts: {
+        // Last 8 weeks, oldest first, including empty weeks.
+        weekly: (() => {
+          const monday = (d: Date) => { const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x }
+          const byWeek = new Map(weekly.map(w => [monday(new Date(w.week)).getTime(), w.count]))
+          const start = monday(new Date())
+          return Array.from({ length: 8 }, (_, i) => {
+            const d = new Date(start.getTime() - (7 - i) * 7 * 24 * 3600 * 1000)
+            return { week: d.toISOString().slice(0, 10), count: byWeek.get(d.getTime()) ?? 0 }
+          })
+        })(),
+        funnel: temperature ? [
+          { stage: 'Saved leads', count: temperature.total },
+          { stage: 'Enriched', count: temperature.total - temperature.notEnriched },
+          { stage: 'Gap analysed', count: temperature.total - temperature.notAnalysed },
+          { stage: 'MVPs built', count: mvpsBuilt },
+          ...(auth.role === 'admin' ? [{ stage: 'Sites live', count: siteCount }] : []),
+        ] : [],
+        campaignLeads: [...campaigns].sort((a, b) => b.leadCount - a.leadCount).slice(0, 6).map(c => ({ id: c.id, name: c.name, count: c.leadCount })),
+      },
     })
   } catch (err: any) {
     console.error('[dashboard]', err.message)

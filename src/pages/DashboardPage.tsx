@@ -2,6 +2,7 @@ import { useEffect, useState, type FC } from 'react'
 import { getDashboard, type Dashboard, type LeadTemperature, type Temp } from '../lib/api'
 import { useSession } from '../components/LoginGate'
 import { OFFER_LABEL } from '../lib/offers'
+import { BarChart, Donut, Funnel, HBars, SERIES } from '../components/Charts'
 
 interface Props {
   onNavigate: (page: string) => void
@@ -107,6 +108,10 @@ const DashboardPage: FC<Props> = ({ onNavigate, onOpenCampaign, onOpenGaps, onOp
               </button>
             ))}
           </section>
+
+          {data.charts && (data.temperature?.total ?? 0) > 0 && (
+            <ChartsPanel d={data} onOpenCampaign={onOpenCampaign} />
+          )}
 
           {data.temperature && data.temperature.total > 0 && (
             <TemperaturePanel t={data.temperature} onNavigate={onNavigate} onOpenGaps={onOpenGaps} />
@@ -265,16 +270,16 @@ const TemperaturePanel: FC<{ t: LeadTemperature; onNavigate: (p: string) => void
         </div>
       )}
 
-      <div className="temp-bar" role="img" aria-label={`Hot ${t.hot}, warm ${t.warm}, cold ${t.cold}`}>
-        {temps.map(k => t[k] > 0 && (
-          <span key={k} className={`temp-seg ${k}`} style={{ flexGrow: t[k] }} title={`${TEMP[k].label}: ${t[k]} (${pct(t[k])}%)`}>
-            {pct(t[k]) >= 8 && `${pct(t[k])}%`}
-          </span>
-        ))}
-      </div>
-
       <div className="temp-grid">
         <div className="temp-cards">
+          <Donut
+            centerLabel="saved leads"
+            slices={[
+              { label: 'Hot', value: t.hot, color: '#E5484D' },
+              { label: 'Warm', value: t.warm, color: '#E09B1A' },
+              { label: 'Cold', value: t.cold, color: '#5B7FB8' },
+            ]}
+          />
           {temps.map(k => (
             <div key={k} className={`temp-card ${k}`}>
               <div className="temp-card-top">
@@ -338,6 +343,70 @@ const TemperaturePanel: FC<{ t: LeadTemperature; onNavigate: (p: string) => void
           })}
         </div>
       )}
+    </section>
+  )
+}
+
+const shortWeek = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+// Charts: momentum (leads per week), the pipeline, what leads need, and the biggest campaigns.
+const ChartsPanel: FC<{ d: Dashboard; onOpenCampaign: (id: string | null) => void }> = ({ d, onOpenCampaign }) => {
+  const c = d.charts!
+  const weekTotal = c.weekly.reduce((s, w) => s + w.count, 0)
+  const thisWeek = c.weekly[c.weekly.length - 1]?.count ?? 0
+  const lastWeek = c.weekly[c.weekly.length - 2]?.count ?? 0
+  const offers = d.temperature?.offers ?? []
+  const top = offers.slice(0, 4)
+  const other = offers.slice(4).reduce((s, o) => s + o.count, 0)
+  const offerSlices = [
+    ...top.map((o, i) => ({ label: OFFER_LABEL[o.offer] ?? o.offer, value: o.count, color: SERIES[i] })),
+    ...(other ? [{ label: 'Other', value: other, color: '#b5b3ad' }] : []),
+  ]
+  return (
+    <section className="dash-charts" aria-label="Charts">
+      <div className="dash-panel chart-card">
+        <div className="dash-panel-head">
+          <div>
+            <h2>Leads saved per week</h2>
+            <div className="dash-row-sub">{weekTotal.toLocaleString()} in the last 8 weeks · this week {thisWeek}{lastWeek ? ` (${thisWeek >= lastWeek ? '+' : ''}${thisWeek - lastWeek} vs last week)` : ''}</div>
+          </div>
+        </div>
+        <BarChart unit="leads saved" data={c.weekly.map(w => ({ label: shortWeek(w.week), value: w.count, title: `Week of ${shortWeek(w.week)}` }))} />
+      </div>
+
+      <div className="dash-panel chart-card">
+        <div className="dash-panel-head">
+          <div>
+            <h2>Pipeline</h2>
+            <div className="dash-row-sub">How far your leads have come; % made it from the step before</div>
+          </div>
+        </div>
+        <Funnel stages={c.funnel} />
+      </div>
+
+      <div className="dash-panel chart-card">
+        <div className="dash-panel-head">
+          <div>
+            <h2>What your leads need</h2>
+            <div className="dash-row-sub">Solutions recommended by gap analysis</div>
+          </div>
+        </div>
+        {offerSlices.length ? <Donut slices={offerSlices} centerLabel="analysed leads" /> : (
+          <div className="dash-empty"><p>Run gap analysis on your leads to see which solutions they need most.</p></div>
+        )}
+      </div>
+
+      <div className="dash-panel chart-card">
+        <div className="dash-panel-head">
+          <div>
+            <h2>Leads by campaign</h2>
+            <div className="dash-row-sub">Your largest campaigns</div>
+          </div>
+        </div>
+        {c.campaignLeads.length ? (
+          <HBars data={c.campaignLeads.map(x => ({ label: x.name, value: x.count }))} onClick={i => onOpenCampaign(c.campaignLeads[i].id)} />
+        ) : <div className="dash-empty"><p>No campaigns yet.</p></div>}
+      </div>
     </section>
   )
 }
