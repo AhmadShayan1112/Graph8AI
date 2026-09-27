@@ -1,17 +1,21 @@
 import { useEffect, useState, type FC } from 'react'
 import type { Lead } from '../types/lead'
-import { enrichLead } from '../lib/api'
+import { enrichLead, listGapAnalyses } from '../lib/api'
+import { buildLeadReport, openReportWindow, showReport } from '../lib/report'
 
 interface Props {
   lead: Lead
   onBuild: (mvpType: string) => void
   onBack: () => void
   onEnriched: (lead: Lead) => void
+  // The campaign the lead was opened from, so its gap analysis can go in the report.
+  campaignId?: string
 }
 
 const TABS = ['All findings', 'Online Presence', 'Mobile', 'Speed', 'SEO', 'Lead Capture']
 
-const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched }) => {
+const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId }) => {
+  const [exporting, setExporting] = useState(false)
   const [activeTab, setActiveTab] = useState('All findings')
   const [enriching, setEnriching] = useState(!lead.enrichment)
   const [enrichError, setEnrichError] = useState('')
@@ -53,6 +57,20 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched }) => {
     }))
   )
 
+  // The tab opens straight from the click (so it isn't blocked), then the report is filled in.
+  const exportPdf = async () => {
+    const w = openReportWindow()
+    setExporting(true)
+    try {
+      const gap = campaignId
+        ? (await listGapAnalyses(campaignId).catch(() => null))?.analyses.find(g => g.leadId === lead.id) ?? null
+        : null
+      showReport(w, buildLeadReport(lead, findings, gap))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filteredFindings = activeTab === 'All findings'
     ? findings
     : findings.filter(f => f.cat === activeTab)
@@ -84,7 +102,9 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched }) => {
           </div>
         </div>
         <div className="page-header-actions">
-          <button className="btn-secondary">Export PDF</button>
+          <button className="btn-secondary" onClick={exportPdf} disabled={exporting}>
+            {exporting ? 'Preparing PDF…' : 'Export PDF'}
+          </button>
           <button className="btn-accent" onClick={() => onBuild(analysis.biggestGap.mvpType)}>
             Build MVP for this gap →
           </button>

@@ -315,6 +315,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         {page === 'audit' && selectedLead && (
           <AuditPage
             lead={selectedLead}
+            campaignId={activeCampaign?.id}
             onEnriched={enriched => {
               setSelectedLead(enriched)
               setLeads(ls => ls.map(l => (l.id === enriched.id ? enriched : l)))

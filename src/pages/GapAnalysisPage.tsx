@@ -8,6 +8,7 @@ import {
   useGapRunner, type Phase,
 } from '../lib/gapRunner'
 import { useSession } from '../components/LoginGate'
+import { buildLeadReport, openReportWindow, showReport } from '../lib/report'
 
 interface Props {
   campaignId: string | null
@@ -319,6 +320,18 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
                     </div>
                     <div className="gap-detail-actions">
                       <button className="btn-secondary" onClick={() => onAudit(campaign, lead)}>Audit</button>
+                      {gap && (
+                        <button
+                          className="btn-secondary"
+                          onClick={() => showReport(openReportWindow(), buildLeadReport(
+                            lead,
+                            (lead.analysis?.categories ?? []).flatMap(c => c.findings.map(f => ({ title: f, cat: c.label }))),
+                            gap,
+                          ))}
+                        >
+                          Export PDF
+                        </button>
+                      )}
                       <button className={gap ? 'btn-secondary' : 'btn-accent'} onClick={() => analyseOne(lead)} disabled={!canRun || active}>
                         {running === lead.id ? 'Researching…' : gap ? 'Re-run' : 'Run gap analysis'}
                       </button>
