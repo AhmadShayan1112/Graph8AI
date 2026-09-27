@@ -6,6 +6,7 @@ const ICONS: Record<string, ReactNode> = {
   analysis: <><path d="M4 20V11" /><path d="M10 20V5" /><path d="M16 20v-6" /><path d="M21 20H3" /></>,
   campaigns: <><path d="M5 21V4" /><path d="M5 4h12l-2.5 4L17 12H5" /></>,
   discover: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></>,
+  gaps: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="1.5" /></>,
   audit: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3h6v1.5" /><path d="m9 13 2 2 4-4" /></>,
   build: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></>,
   outreach: <><path d="M21 3 10 14" /><path d="m21 3-6.5 18-4.5-7-7-4.5L21 3Z" /></>,
@@ -30,6 +31,7 @@ const GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }>
     title: 'Prospect',
     items: [
       { id: 'discover', label: 'Discover' },
+      { id: 'gaps', label: 'Gap analysis' },
       { id: 'audit', label: 'Audit' },
       { id: 'build', label: 'Build & deploy' },
       { id: 'outreach', label: 'Outreach' },
@@ -105,6 +107,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
         <div className="sidebar-access">
           <span className={`settings-badge ${user.permissions.claude ? 'ok' : ''}`}>Claude {user.permissions.claude ? 'on' : 'off'}</span>
           <span className={`settings-badge ${user.permissions.graph8 ? 'ok' : ''}`}>Graph8 {user.permissions.graph8 ? 'on' : 'off'}</span>
+          <span className={`settings-badge ${user.permissions.gemini ? 'ok' : ''}`}>Gemini {user.permissions.gemini ? 'on' : 'off'}</span>
         </div>
       </div>
     </aside>

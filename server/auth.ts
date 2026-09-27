@@ -27,7 +27,7 @@ export interface AuthInfo {
   permissions: Permissions
 }
 
-const ADMIN: AuthInfo = { role: 'admin', userId: null, username: 'admin', permissions: { claude: true, graph8: true } }
+const ADMIN: AuthInfo = { role: 'admin', userId: null, username: 'admin', permissions: { claude: true, graph8: true, gemini: true } }
 
 export function parseCookies(req: Request) {
   const out: Record<string, string> = {}
@@ -163,6 +163,7 @@ export function requireAdmin(_req: Request, res: Response, next: NextFunction) {
 const PERMISSION_LABEL: Record<Permission, string> = {
   claude: 'MVP generation with Claude',
   graph8: 'Lead search with Graph8',
+  gemini: 'Gap analysis with Gemini',
 }
 
 export function requirePermission(p: Permission) {

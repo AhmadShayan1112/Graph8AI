@@ -127,7 +127,7 @@ export async function generateOutreach(
   })
 }
 
-export type Permission = 'claude' | 'graph8'
+export type Permission = 'claude' | 'graph8' | 'gemini'
 export type Permissions = Record<Permission, boolean>
 
 export interface SessionUser { username: string; role: 'admin' | 'user'; permissions: Permissions }
@@ -147,11 +147,12 @@ export const signUp = (username: string, password: string) =>
   apiFetch<{ authenticated: boolean; user: SessionUser | null }>('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password }) })
 export const logout = () => apiFetch<{ authenticated: boolean }>('/auth/logout', { method: 'POST' })
 
-export type SecretKind = 'graph8' | 'claude'
+export type SecretKind = 'graph8' | 'claude' | 'gemini'
 
 export interface SecretsStatus {
   graph8: { configured: boolean; source: 'settings' | 'env' | null; updatedAt: string | null }
   claude: { configured: boolean; updatedAt: string | null }
+  gemini: { configured: boolean; updatedAt: string | null }
 }
 export interface SettingsStatus extends SecretsStatus {
   database: { connected: boolean; name: string }
@@ -244,3 +245,37 @@ export const getCampaignAnalysis = (id: string) => apiFetch<CampaignAnalysis>(`/
 // Calls Graph8 for fresh market numbers.
 export const refreshCampaignAnalysis = (id: string) =>
   apiFetch<CampaignAnalysis>(`/campaigns/${id}/analysis`, { method: 'POST' })
+
+export type GapLevel = 'high' | 'medium' | 'low'
+export interface GapAnalysis {
+  leadId: string
+  leadName: string
+  username: string
+  usedGraph8: boolean
+  createdAt: string
+  sources: Array<{ title: string; url: string }>
+  queries: string[]
+  result: {
+    summary: string
+    onlinePresence: { website: string; websiteStatus: string; googleBusiness: string; reviews: string; social: string }
+    gaps: Array<{ title: string; severity: GapLevel; evidence: string; impact: string }>
+    needs: Array<{ solution: string; why: string; priority: GapLevel }>
+    prospect: {
+      fitScore: number
+      recommendedOffer: string
+      offerReason: string
+      pitch: string
+      talkingPoints: string[]
+      emailSubject: string
+      emailOpening: string
+      bestChannel: string
+      decisionMaker: string
+    }
+  }
+}
+
+export const listGapAnalyses = (campaignId: string) =>
+  apiFetch<{ analyses: GapAnalysis[] }>(`/campaigns/${campaignId}/gaps`)
+// Runs Graph8 + Gemini web research for one lead; takes 10-60 seconds.
+export const runGapAnalysis = (campaignId: string, leadId: string) =>
+  apiFetch<{ analysis: GapAnalysis }>(`/campaigns/${campaignId}/gaps/${encodeURIComponent(leadId)}`, { method: 'POST' })

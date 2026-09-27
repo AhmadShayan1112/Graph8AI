@@ -27,8 +27,10 @@ import { deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } 
 import {
   campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
-  getMarketAnalysis, saveMarketAnalysis, type CampaignTarget, type MarketAnalysis,
+  getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
+import { listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
+import { GeminiError } from './gemini.js'
 
 export const app = express()
 app.disable('x-powered-by')
@@ -58,7 +60,7 @@ app.use(['/api/search', '/api/leads/discover', '/api/leads/enrich', '/api/g8'], 
 app.use('/api/mvp', requirePermission('claude'))
 
 // Secrets are write-only: the API accepts them but only ever reports whether they are set.
-const SECRET_ROUTES: Record<string, SecretName> = { graph8: 'graph8ApiKey', claude: 'claudeToken' }
+const SECRET_ROUTES: Record<string, SecretName> = { graph8: 'graph8ApiKey', claude: 'claudeToken', gemini: 'geminiApiKey' }
 
 app.get('/api/settings', async (_req, res) => {
   try {
@@ -653,6 +655,30 @@ app.post('/api/campaigns/:id/analysis', needsGraph8, async (req, res) => {
     console.error('[analysis] refresh failed:', err.message)
     const missingKey = /not configured/.test(err.message)
     res.status(missingKey ? 400 : 502).json({ error: missingKey ? err.message : 'Graph8 could not analyse this market right now. Try again shortly.' })
+  }
+})
+
+// Gap analysis: Graph8's record plus Gemini web research per saved campaign lead.
+app.get('/api/campaigns/:id/gaps', async (req, res) => {
+  try {
+    const campaignId = await campaignIdFor(getAuth(res), req.params.id)
+    if (!campaignId) { res.status(404).json({ error: 'Campaign not found' }); return }
+    res.json({ analyses: await listGapAnalyses(campaignId) })
+  } catch (err: any) {
+    console.error('[gaps] list failed:', err.message)
+    res.status(503).json({ error: 'Could not load gap analyses.' })
+  }
+})
+
+app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (req, res) => {
+  try {
+    const found = await getCampaignLead(getAuth(res), req.params.id, req.params.leadId)
+    if (!found) { res.status(404).json({ error: 'Lead not found in this campaign' }); return }
+    res.json({ analysis: await runGapAnalysis(getAuth(res), found.campaignId, found.lead) })
+  } catch (err: any) {
+    if (err instanceof GeminiError) { res.status(err.status).json({ error: err.message }); return }
+    console.error('[gaps] run failed:', err.message)
+    res.status(502).json({ error: 'The gap analysis failed. Try again shortly.' })
   }
 })
 

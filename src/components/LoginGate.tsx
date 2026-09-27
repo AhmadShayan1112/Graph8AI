@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type FC, type FormEvent, type ReactNode } from 'react'
 import { getSession, login, signUp, UNAUTHORIZED_EVENT, type SessionInfo, type SessionUser } from '../lib/api'
 
-const FULL_ACCESS: SessionUser = { username: 'admin', role: 'admin', permissions: { claude: true, graph8: true } }
+const FULL_ACCESS: SessionUser = { username: 'admin', role: 'admin', permissions: { claude: true, graph8: true, gemini: true } }
 
 interface SessionContextValue {
   user: SessionUser

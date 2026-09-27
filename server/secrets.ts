@@ -1,7 +1,7 @@
 import { getDb } from './db.js'
 import { decrypt, encrypt } from './crypto.js'
 
-export type SecretName = 'graph8ApiKey' | 'claudeToken'
+export type SecretName = 'graph8ApiKey' | 'claudeToken' | 'geminiApiKey'
 
 interface SettingsDoc {
   _id: 'app'
@@ -9,6 +9,8 @@ interface SettingsDoc {
   graph8ApiKeyUpdatedAt?: Date
   claudeToken?: string
   claudeTokenUpdatedAt?: Date
+  geminiApiKey?: string
+  geminiApiKeyUpdatedAt?: Date
   // Workspace-wide access the admin grants to every user on top of their own switches.
   graph8ForEveryone?: boolean
 }
@@ -38,7 +40,7 @@ async function readSecret(name: SecretName) {
 export async function secretStatus() {
   const doc = await (await settings()).findOne(
     { _id: 'app' },
-    { projection: { graph8ApiKeyUpdatedAt: 1, claudeTokenUpdatedAt: 1, graph8ApiKey: 1, claudeToken: 1 } },
+    { projection: { graph8ApiKeyUpdatedAt: 1, claudeTokenUpdatedAt: 1, geminiApiKeyUpdatedAt: 1, graph8ApiKey: 1, claudeToken: 1, geminiApiKey: 1 } },
   )
   return {
     graph8: {
@@ -47,12 +49,18 @@ export async function secretStatus() {
       updatedAt: doc?.graph8ApiKeyUpdatedAt ?? null,
     },
     claude: { configured: !!doc?.claudeToken, updatedAt: doc?.claudeTokenUpdatedAt ?? null },
+    gemini: { configured: !!doc?.geminiApiKey, updatedAt: doc?.geminiApiKeyUpdatedAt ?? null },
   }
 }
 
 // The Claude token is read fresh on every use (no cache) so a delete takes effect immediately.
 export function getClaudeToken() {
   return readSecret('claudeToken')
+}
+
+// Read fresh on every use, like the Claude token, so a delete takes effect immediately.
+export function getGeminiKey() {
+  return readSecret('geminiApiKey')
 }
 
 // Discover fires several Graph8 calls per request; a short per-instance cache avoids a DB read for each.

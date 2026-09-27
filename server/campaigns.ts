@@ -2,6 +2,7 @@ import { ObjectId, type AnyBulkWriteOperation } from 'mongodb'
 import { getDb } from './db.js'
 import type { AuthInfo } from './auth.js'
 import { campaignStats, deleteSearchesInCampaign, ownerOf, scope } from './history.js'
+import { deleteGapAnalysesFor } from './gapAnalysis.js'
 
 // A campaign groups the searches someone runs for one goal and keeps every lead they turned up.
 // Users see their own campaigns; the admin sees everyone's.
@@ -149,6 +150,7 @@ export async function deleteCampaign(auth: AuthInfo, id: string) {
     leads.deleteMany({ campaignId: c._id }),
     deleteSearchesInCampaign(c._id),
     analyses().then(col => col.deleteOne({ _id: c._id })),
+    deleteGapAnalysesFor([c._id]),
   ])
   await campaigns.deleteOne({ _id: c._id })
   return true
@@ -204,6 +206,7 @@ export async function deleteCampaignsFor(ownerId: string) {
   if (!ids.length) return
   await leads.deleteMany({ campaignId: { $in: ids } })
   await (await analyses()).deleteMany({ _id: { $in: ids } })
+  await deleteGapAnalysesFor(ids)
   await campaigns.deleteMany({ _id: { $in: ids } })
 }
 
@@ -231,4 +234,13 @@ export async function getMarketAnalysis(campaignId: string) {
 
 export async function saveMarketAnalysis(campaignId: string, a: MarketAnalysis) {
   await (await analyses()).replaceOne({ _id: new ObjectId(campaignId) }, a, { upsert: true })
+}
+
+// One saved lead, if this person may see the campaign.
+export async function getCampaignLead(auth: AuthInfo, campaignId: string, leadId: string) {
+  const c = await findCampaign(auth, campaignId)
+  if (!c) return null
+  const { leads } = await collections()
+  const doc = await leads.findOne({ campaignId: c._id, leadId })
+  return doc ? { campaignId: c._id, lead: doc.lead as Record<string, any> } : null
 }

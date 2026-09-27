@@ -14,6 +14,12 @@ const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder
     help: 'Used to discover and enrich leads.',
     placeholder: 'Paste your Graph8 API key',
   },
+  {
+    kind: 'gemini',
+    label: 'Gemini API key',
+    help: 'Used for gap analysis: Gemini searches the web about each lead. Create one in Google AI Studio.',
+    placeholder: 'AIza…',
+  },
 ]
 
 const SettingsPage: FC = () => {

@@ -4,10 +4,10 @@ import { getDb } from './db.js'
 import { safeEqual } from './crypto.js'
 
 // Users are created by the admin. Each one can be allowed or denied the shared API keys:
-// `claude` gates MVP generation, `graph8` gates lead search and enrichment.
-export type Permission = 'claude' | 'graph8'
+// `claude` gates MVP generation, `graph8` gates lead search and enrichment, `gemini` gates gap analysis.
+export type Permission = 'claude' | 'graph8' | 'gemini'
 export type Permissions = Record<Permission, boolean>
-export const PERMISSIONS: Permission[] = ['claude', 'graph8']
+export const PERMISSIONS: Permission[] = ['claude', 'graph8', 'gemini']
 
 interface UserDoc {
   _id: ObjectId
@@ -82,13 +82,13 @@ export function validatePassword(pw: unknown) {
 }
 
 export function parsePermissions(p: any): Permissions {
-  return { claude: p?.claude === true, graph8: p?.graph8 === true }
+  return { claude: p?.claude === true, graph8: p?.graph8 === true, gemini: p?.gemini === true }
 }
 
 const toPublic = (u: UserDoc): PublicUser => ({
   id: String(u._id),
   username: u.username,
-  permissions: { claude: !!u.permissions?.claude, graph8: !!u.permissions?.graph8 },
+  permissions: { claude: !!u.permissions?.claude, graph8: !!u.permissions?.graph8, gemini: !!u.permissions?.gemini },
   disabled: !!u.disabled,
   selfSignup: !!u.selfSignup,
   createdAt: u.createdAt,
@@ -106,7 +106,7 @@ export async function createUser(username: string, password: string, permissions
     _id: new ObjectId(),
     username,
     passwordHash: await hashPassword(password),
-    permissions: selfSignup ? { claude: false, graph8: false } : permissions,
+    permissions: selfSignup ? { claude: false, graph8: false, gemini: false } : permissions,
     disabled: false,
     selfSignup,
     sessionVersion: 1,
@@ -121,7 +121,7 @@ export async function createUser(username: string, password: string, permissions
 export async function signUp(username: string, password: string) {
   const recent = await (await users()).countDocuments({ selfSignup: true, createdAt: { $gt: new Date(Date.now() - 3600_000) } })
   if (recent >= MAX_SIGNUPS_PER_HOUR) return null
-  const user = await createUser(username, password, { claude: false, graph8: false }, true)
+  const user = await createUser(username, password, { claude: false, graph8: false, gemini: false }, true)
   return { user, sessionVersion: 1 }
 }
 

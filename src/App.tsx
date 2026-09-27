@@ -11,6 +11,7 @@ import UsersPage from './pages/UsersPage'
 import HistoryPage from './pages/HistoryPage'
 import CampaignsPage from './pages/CampaignsPage'
 import AnalysisPage from './pages/AnalysisPage'
+import GapAnalysisPage from './pages/GapAnalysisPage'
 import LoginGate, { useSession } from './components/LoginGate'
 import { EMPTY_FILTERS, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
@@ -44,6 +45,7 @@ function Workspace() {
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(null)
   const [analysisCampaignId, setAnalysisCampaignId] = useState<string | null>(null)
+  const [gapCampaignId, setGapCampaignId] = useState<string | null>(null)
 
   // Pages visited, so Back can return to the previous one.
   const history = useRef<string[]>([])
@@ -215,6 +217,21 @@ function Workspace() {
             campaignId={analysisCampaignId}
             onCampaignId={setAnalysisCampaignId}
             onOpenCampaign={id => openCampaign(id)}
+            onNewCampaign={() => openCampaign(null)}
+          />
+        )}
+        {page === 'gaps' && (
+          <GapAnalysisPage
+            campaignId={gapCampaignId}
+            onCampaignId={setGapCampaignId}
+            onAudit={handleCampaignLead}
+            onBuild={(c, lead, offer) => {
+              setActiveCampaign(c)
+              setSelectedLead(lead)
+              setSiteUrl(undefined)
+              setMvpType(offer)
+              setPage('build')
+            }}
             onNewCampaign={() => openCampaign(null)}
           />
         )}

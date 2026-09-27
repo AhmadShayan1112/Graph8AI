@@ -7,6 +7,7 @@ import {
 const KEYS: Array<{ id: Permission; label: string; help: string }> = [
   { id: 'claude', label: 'Claude', help: 'Build MVP sites' },
   { id: 'graph8', label: 'Graph8', help: 'Search & enrich leads' },
+  { id: 'gemini', label: 'Gemini', help: 'Gap analysis with web search' },
 ]
 
 export const Toggle: FC<{ on: boolean; label: string; disabled?: boolean; onChange: (on: boolean) => void }> = ({ on, label, disabled, onChange }) => (
@@ -134,7 +135,7 @@ const UsersPage: FC = () => {
 const AddUser: FC<{ onCreated: (u: AppUser) => void }> = ({ onCreated }) => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [perms, setPerms] = useState<Permissions>({ claude: false, graph8: true })
+  const [perms, setPerms] = useState<Permissions>({ claude: false, graph8: true, gemini: false })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
