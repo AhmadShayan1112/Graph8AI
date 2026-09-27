@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { safeEqual, sign } from './crypto.js'
+import {
+  authenticateUser, getSessionUser, normalizeUsername, signUp as createPendingUser, validatePassword, validateUsername,
+  type Permission, type Permissions,
+} from './users.js'
 
-// A single admin password (ADMIN_PASSWORD env) guards the app and its settings.
-// Without it a public deployment would let anyone replace or delete your keys and spend your credits.
+// The admin signs in as "admin" with ADMIN_PASSWORD and manages keys and users.
+// Users are created by the admin and can only use the API keys the admin has switched on for them.
+// Without ADMIN_PASSWORD a public deployment would let anyone replace or delete your keys and spend your credits.
 const COOKIE = 'gw_session'
 const TTL_MS = 12 * 60 * 60 * 1000
 
@@ -14,6 +19,15 @@ export const authRequired = () => !!process.env.ADMIN_PASSWORD || onVercel()
 const sessionPurpose = () =>
   `session:${createHash('sha256').update(process.env.ADMIN_PASSWORD ?? '').digest('hex')}`
 
+export interface AuthInfo {
+  role: 'admin' | 'user'
+  userId: string | null
+  username: string
+  permissions: Permissions
+}
+
+const ADMIN: AuthInfo = { role: 'admin', userId: null, username: 'admin', permissions: { claude: true, graph8: true } }
+
 export function parseCookies(req: Request) {
   const out: Record<string, string> = {}
   for (const part of (req.headers.cookie ?? '').split(';')) {
@@ -23,12 +37,22 @@ export function parseCookies(req: Request) {
   return out
 }
 
-function isAuthenticated(req: Request) {
-  if (!authRequired()) return true
-  if (!process.env.ADMIN_PASSWORD) return false
-  const [exp, mac] = (parseCookies(req)[COOKIE] ?? '').split('.')
-  if (!exp || !mac || Number(exp) < Date.now()) return false
-  return safeEqual(mac, sign(exp, sessionPurpose()))
+// Cookie: `<subject>.<expiry>.<mac>`, subject is "admin" or "u-<userId>-<sessionVersion>".
+async function resolveSession(req: Request): Promise<AuthInfo | null> {
+  if (!authRequired()) return ADMIN
+  if (!process.env.ADMIN_PASSWORD) return null
+  const [sub, exp, mac] = (parseCookies(req)[COOKIE] ?? '').split('.')
+  if (!sub || !exp || !mac || Number(exp) < Date.now()) return null
+  if (!safeEqual(mac, sign(`${sub}.${exp}`, sessionPurpose()))) return null
+  if (sub === 'admin') return ADMIN
+  const m = sub.match(/^u-([0-9a-f]{24})-(\d+)$/)
+  if (!m) return null
+  return userAuth(m[1], Number(m[2]))
+}
+
+async function userAuth(id: string, sessionVersion: number): Promise<AuthInfo | null> {
+  const user = await getSessionUser(id, sessionVersion)
+  return user && { role: 'user', userId: user.id, username: user.username, permissions: user.permissions }
 }
 
 function cookieAttrs(maxAgeSec: number) {
@@ -36,21 +60,65 @@ function cookieAttrs(maxAgeSec: number) {
   return `Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSec}${secure}`
 }
 
-export function login(req: Request, res: Response) {
+function startSession(res: Response, sub: string) {
+  const exp = String(Date.now() + TTL_MS)
+  res.setHeader('Set-Cookie', `${COOKIE}=${sub}.${exp}.${sign(`${sub}.${exp}`, sessionPurpose())}; ${cookieAttrs(TTL_MS / 1000)}`)
+}
+
+const publicAuth = (a: AuthInfo) => ({ username: a.username, role: a.role, permissions: a.permissions })
+
+export async function login(req: Request, res: Response) {
   const expected = process.env.ADMIN_PASSWORD
   if (!expected) {
     res.status(503).json({ error: 'Set the ADMIN_PASSWORD environment variable to enable sign-in.' })
     return
   }
+  const username = normalizeUsername(req.body?.username) || 'admin'
   const given = String(req.body?.password ?? '')
-  const digest = (s: string) => createHash('sha256').update(s).digest('hex')
-  if (!safeEqual(digest(given), digest(expected))) {
-    res.status(401).json({ error: 'Wrong password' })
+
+  if (username === 'admin') {
+    const digest = (s: string) => createHash('sha256').update(s).digest('hex')
+    if (!safeEqual(digest(given), digest(expected))) {
+      res.status(401).json({ error: 'Wrong username or password' })
+      return
+    }
+    startSession(res, 'admin')
+    res.json({ authenticated: true, user: publicAuth(ADMIN) })
     return
   }
-  const exp = String(Date.now() + TTL_MS)
-  res.setHeader('Set-Cookie', `${COOKIE}=${exp}.${sign(exp, sessionPurpose())}; ${cookieAttrs(TTL_MS / 1000)}`)
-  res.json({ authenticated: true })
+
+  try {
+    const user = await authenticateUser(username, given)
+    if (!user) { res.status(401).json({ error: 'Wrong username or password' }); return }
+    if (user.status === 'pending') { res.status(403).json({ error: 'Your account is waiting for admin approval.' }); return }
+    if (user.status === 'disabled') { res.status(403).json({ error: 'Your account has been disabled by the admin.' }); return }
+    startSession(res, `u-${user.id}-${user.sessionVersion}`)
+    const auth = await userAuth(user.id, user.sessionVersion)
+    res.json({ authenticated: true, user: auth && publicAuth(auth) })
+  } catch (err: any) {
+    console.error('[auth] user login failed:', err.message)
+    res.status(503).json({ error: 'Could not reach the database. Try again shortly.' })
+  }
+}
+
+// Anyone can ask for an account; it stays pending with every key off until the admin approves it.
+export async function signUp(req: Request, res: Response) {
+  if (!process.env.ADMIN_PASSWORD) {
+    res.status(503).json({ error: 'Sign-up is unavailable until the server is configured.' })
+    return
+  }
+  const username = normalizeUsername(req.body?.username)
+  const invalid = validateUsername(username) ?? validatePassword(req.body?.password)
+  if (invalid) { res.status(400).json({ error: invalid }); return }
+  try {
+    const user = await createPendingUser(username, req.body.password)
+    if (!user) { res.status(429).json({ error: 'Too many accounts are waiting for approval. Try again later.' }); return }
+    res.json({ pending: true })
+  } catch (err: any) {
+    if (err.code === 11000) { res.status(409).json({ error: 'That username is taken.' }); return }
+    console.error('[auth] sign-up failed:', err.message)
+    res.status(503).json({ error: 'Could not reach the database. Try again shortly.' })
+  }
 }
 
 export function logout(_req: Request, res: Response) {
@@ -58,15 +126,43 @@ export function logout(_req: Request, res: Response) {
   res.json({ authenticated: false })
 }
 
-export function session(req: Request, res: Response) {
+export async function session(req: Request, res: Response) {
+  const auth = await resolveSession(req).catch(() => null)
   res.json({
     required: authRequired(),
-    authenticated: isAuthenticated(req),
+    authenticated: !!auth,
     passwordConfigured: !!process.env.ADMIN_PASSWORD,
+    user: auth ? publicAuth(auth) : null,
   })
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (isAuthenticated(req)) { next(); return }
+export const getAuth = (res: Response) => res.locals.auth as AuthInfo
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const auth = await resolveSession(req)
+    if (auth) { res.locals.auth = auth; next(); return }
+  } catch (err: any) {
+    console.error('[auth] session check failed:', err.message)
+    res.status(503).json({ error: 'Could not reach the database. Try again shortly.' })
+    return
+  }
   res.status(401).json({ error: 'Sign in required' })
+}
+
+export function requireAdmin(_req: Request, res: Response, next: NextFunction) {
+  if (getAuth(res)?.role === 'admin') { next(); return }
+  res.status(403).json({ error: 'Only the admin can do this.' })
+}
+
+const PERMISSION_LABEL: Record<Permission, string> = {
+  claude: 'MVP generation with Claude',
+  graph8: 'Lead search with Graph8',
+}
+
+export function requirePermission(p: Permission) {
+  return (_req: Request, res: Response, next: NextFunction) => {
+    if (getAuth(res)?.permissions[p]) { next(); return }
+    res.status(403).json({ error: `${PERMISSION_LABEL[p]} is turned off for your account. Ask the admin to enable it.`, permission: p })
+  }
 }

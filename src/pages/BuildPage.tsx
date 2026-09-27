@@ -1,13 +1,15 @@
 import { useState, type FC } from 'react'
 import type { Lead, MvpData } from '../types/lead'
 import { deploySite, generateMvp } from '../lib/api'
+import { useSession } from '../components/LoginGate'
 
 interface Props {
   lead: Lead
   mvpType: string
   onOutreach: (siteUrl?: string) => void
   onBack: () => void
-  onOpenSettings: () => void
+  // Only the admin can open Settings.
+  onOpenSettings?: () => void
 }
 
 const MVP_OPTIONS = [
@@ -18,6 +20,8 @@ const MVP_OPTIONS = [
 ]
 
 const BuildPage: FC<Props> = ({ lead, mvpType, onOutreach, onBack, onOpenSettings }) => {
+  const { user } = useSession()
+  const canBuild = user.permissions.claude
   const [selected, setSelected] = useState(mvpType)
   const [mvp, setMvp] = useState<MvpData | null>(null)
   const [building, setBuilding] = useState(false)
@@ -42,7 +46,7 @@ const BuildPage: FC<Props> = ({ lead, mvpType, onOutreach, onBack, onOpenSetting
       setBuilt(true)
     } catch (err: any) {
       setStepIndex(-1)
-      setError({ text: err.message, settings: err.status === 400 && /Settings/.test(err.message) })
+      setError({ text: err.message, settings: !!onOpenSettings && err.status === 400 && /Settings/.test(err.message) })
     } finally {
       clearInterval(timer)
       setBuilding(false)
@@ -111,10 +115,15 @@ const BuildPage: FC<Props> = ({ lead, mvpType, onOutreach, onBack, onOpenSetting
               </span>
             </button>
           ))}
+          {!canBuild && (
+            <div className="settings-alert build-error">
+              MVP generation with Claude is turned off for your account. Ask the admin to enable it.
+            </div>
+          )}
           <button
             className="btn-primary full-width"
             onClick={handleGenerate}
-            disabled={building}
+            disabled={building || !canBuild}
           >
             {building ? 'Generating with Claude…' : built ? '✓ Generated — Regenerate' : 'Generate MVP'}
           </button>

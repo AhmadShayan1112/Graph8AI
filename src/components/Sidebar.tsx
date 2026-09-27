@@ -1,4 +1,5 @@
 import { type FC } from 'react'
+import { useSession } from './LoginGate'
 
 interface NavItem {
   id: string
@@ -13,6 +14,7 @@ const navItems: NavItem[] = [
   { id: 'build', label: 'Build & deploy', num: '03' },
   { id: 'outreach', label: 'Outreach', num: '04' },
   { id: 'pipeline', label: 'Pipeline', num: '05' },
+  { id: 'history', label: 'History', num: '06' },
 ]
 
 interface SidebarProps {
@@ -22,6 +24,8 @@ interface SidebarProps {
 }
 
 const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount }) => {
+  const { user } = useSession()
+  const isAdmin = user.role === 'admin'
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -48,13 +52,24 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount }) => {
       </nav>
 
       <div className="sidebar-bottom-links">
-        <button
-          className={`sidebar-item ${active === 'settings' ? 'active' : ''}`}
-          onClick={() => onNavigate('settings')}
-        >
-          <span className="sidebar-item-num">⚙</span>
-          Settings
-        </button>
+        {isAdmin && (
+          <>
+            <button
+              className={`sidebar-item ${active === 'users' ? 'active' : ''}`}
+              onClick={() => onNavigate('users')}
+            >
+              <span className="sidebar-item-num">◉</span>
+              Users
+            </button>
+            <button
+              className={`sidebar-item ${active === 'settings' ? 'active' : ''}`}
+              onClick={() => onNavigate('settings')}
+            >
+              <span className="sidebar-item-num">⚙</span>
+              Settings
+            </button>
+          </>
+        )}
         <button className="sidebar-landing-link" onClick={() => onNavigate('landing')}>
           ← Marketing site
         </button>
@@ -64,14 +79,11 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount }) => {
       </div>
 
       <div className="sidebar-workspace">
-        <div className="sidebar-workspace-label">Workspace</div>
-        <div className="sidebar-workspace-name">My Agency</div>
-        <div className="sidebar-workspace-credits">
-          <span>MVP credits</span>
-          <span className="mono">14 / 25</span>
-        </div>
-        <div className="sidebar-workspace-bar">
-          <div className="sidebar-workspace-bar-fill" style={{ width: '56%' }} />
+        <div className="sidebar-workspace-label">{isAdmin ? 'Admin' : 'Signed in as'}</div>
+        <div className="sidebar-workspace-name">{user.username}</div>
+        <div className="sidebar-access">
+          <span className={`settings-badge ${user.permissions.claude ? 'ok' : ''}`}>Claude {user.permissions.claude ? 'on' : 'off'}</span>
+          <span className={`settings-badge ${user.permissions.graph8 ? 'ok' : ''}`}>Graph8 {user.permissions.graph8 ? 'on' : 'off'}</span>
         </div>
       </div>
     </aside>

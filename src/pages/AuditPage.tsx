@@ -34,7 +34,7 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched }) => {
           role: en.person?.title || lead.role,
         })
       })
-      .catch(() => { if (!cancelled) setEnrichError('Could not enrich this lead right now.') })
+      .catch(err => { if (!cancelled) setEnrichError(err.status === 403 ? err.message : 'Could not enrich this lead right now.') })
       .finally(() => { if (!cancelled) setEnriching(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps

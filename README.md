@@ -20,6 +20,20 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
   your session.
 - If you rotate `GAPWISE_SECRET`, previously saved keys can no longer be decrypted; re-enter them in Settings.
 
+## Admin and users
+
+- The **admin** signs in with username `admin` and `ADMIN_PASSWORD`, manages keys in **Settings**, and
+  manages people in **Users**.
+- **Users** are added by the admin, or sign up themselves. A sign-up stays *pending*, with every key off,
+  until the admin approves it (at most 50 pending accounts at a time).
+- For each user the admin switches **Claude** (MVP generation) and **Graph8** (lead search and enrichment)
+  on or off. Users share the workspace keys but never see them. Access is checked on the server for every
+  request, so a change, disable or delete takes effect immediately. A password reset signs that user out.
+- User passwords are hashed with scrypt in the `users` collection.
+- Every lead search is saved with its results in the `searches` collection (latest 200 per person).
+  **History** lists them and reopens one in Discover without calling Graph8 again. Users see only their
+  own searches; the admin can switch to everyone's. Deleting a user deletes their history.
+
 ## Local development
 
 ```bash

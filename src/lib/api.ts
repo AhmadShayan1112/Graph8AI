@@ -56,14 +56,33 @@ export const EMPTY_FILTERS: DiscoverFilters = {
 
 export interface DiscoverResult {
   leads: Lead[]
+  searchId: string | null
   total: number
   hasMore: boolean
   matchedOn: { industry: string; locations: DiscoverFilters['locations'] } | null
 }
 
-export async function discoverLeads(filters: DiscoverFilters): Promise<DiscoverResult> {
-  return apiFetch('/leads/discover', { method: 'POST', body: JSON.stringify(filters) })
+// `save: false` keeps searches the app runs by itself out of the user's history.
+export async function discoverLeads(filters: DiscoverFilters, save = true): Promise<DiscoverResult> {
+  return apiFetch('/leads/discover', { method: 'POST', body: JSON.stringify({ ...filters, save }) })
 }
+
+export interface SavedSearchSummary {
+  id: string
+  mine: boolean
+  username: string
+  prompt: string
+  filters: DiscoverFilters
+  matchedOn: DiscoverResult['matchedOn']
+  total: number
+  leadCount: number
+  createdAt: string
+}
+export interface SavedSearch extends Omit<SavedSearchSummary, 'leadCount'> { leads: Lead[] }
+
+export const listSearches = () => apiFetch<{ searches: SavedSearchSummary[] }>('/searches')
+export const getSearch = (id: string) => apiFetch<{ search: SavedSearch }>(`/searches/${id}`)
+export const deleteSearch = (id: string) => apiFetch<{ deleted: boolean }>(`/searches/${id}`, { method: 'DELETE' })
 
 export type FilterOption = { id: string; label: string; count: number }
 
@@ -107,11 +126,24 @@ export async function generateOutreach(
   })
 }
 
-export interface SessionInfo { required: boolean; authenticated: boolean; passwordConfigured: boolean }
+export type Permission = 'claude' | 'graph8'
+export type Permissions = Record<Permission, boolean>
+
+export interface SessionUser { username: string; role: 'admin' | 'user'; permissions: Permissions }
+export interface SessionInfo {
+  required: boolean
+  authenticated: boolean
+  passwordConfigured: boolean
+  user: SessionUser | null
+}
 
 export const getSession = () => apiFetch<SessionInfo>('/auth/session')
-export const login = (password: string) =>
-  apiFetch<{ authenticated: boolean }>('/auth/login', { method: 'POST', body: JSON.stringify({ password }) })
+export const login = (username: string, password: string) =>
+  apiFetch<{ authenticated: boolean; user: SessionUser | null }>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ username, password }),
+  })
+export const signUp = (username: string, password: string) =>
+  apiFetch<{ pending: boolean }>('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password }) })
 export const logout = () => apiFetch<{ authenticated: boolean }>('/auth/logout', { method: 'POST' })
 
 export type SecretKind = 'graph8' | 'claude'
@@ -136,3 +168,20 @@ export const deploySite = (draftId: string) =>
 
 export interface DeployedSite { slug: string; leadName: string; mvpType: string; updatedAt: string }
 export const listSites = () => apiFetch<{ sites: DeployedSite[] }>('/sites')
+
+export interface AppUser {
+  id: string
+  username: string
+  permissions: Permissions
+  disabled: boolean
+  pending: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export const listUsers = () => apiFetch<{ users: AppUser[] }>('/users')
+export const createUser = (username: string, password: string, permissions: Permissions) =>
+  apiFetch<{ user: AppUser }>('/users', { method: 'POST', body: JSON.stringify({ username, password, permissions }) })
+export const updateUser = (id: string, patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string; approve?: boolean }) =>
+  apiFetch<{ user: AppUser }>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+export const deleteUser = (id: string) => apiFetch<{ deleted: boolean }>(`/users/${id}`, { method: 'DELETE' })

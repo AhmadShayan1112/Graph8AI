@@ -15,10 +15,14 @@ import {
   listCompanies,
 } from './graph8.js'
 import { analyzeWebsite, transformToLead, type LeadWithAnalysis } from './analyzer.js'
-import { login, logout, requireAuth, session } from './auth.js'
+import { getAuth, login, logout, requireAdmin, requireAuth, requirePermission, session, signUp } from './auth.js'
 import { deleteSecret, secretStatus, setSecret, type SecretName } from './secrets.js'
 import { generateSiteHtml, publicClaudeError } from './claude.js'
 import { getDb } from './db.js'
+import {
+  createUser, deleteUser, listUsers, normalizeUsername, parsePermissions, updateUser, validatePassword, validateUsername,
+} from './users.js'
+import { deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } from './history.js'
 
 export const app = express()
 app.disable('x-powered-by')
@@ -31,12 +35,21 @@ app.get('/api/health', (_req, res) => { res.json({ status: 'ok' }) })
 app.get('/api/auth/session', session)
 app.post('/api/auth/login', login)
 app.post('/api/auth/logout', logout)
+app.post('/api/auth/signup', signUp)
 
 // Deployed MVP sites are public so leads can open them.
 app.get(['/api/site/:slug', '/:slug'], serveSite)
 
-// Everything else under /api needs the admin session.
+// Everything else under /api needs a signed-in admin or user.
 app.use('/api', requireAuth)
+
+// Keys and user accounts are managed by the admin only.
+app.use(['/api/settings', '/api/users'], requireAdmin)
+
+// Users reach Graph8 and Claude only when the admin has switched that key on for them.
+const needsGraph8 = requirePermission('graph8')
+app.use(['/api/search', '/api/leads/discover', '/api/leads/enrich', '/api/g8'], needsGraph8)
+app.use('/api/mvp', requirePermission('claude'))
 
 // Secrets are write-only: the API accepts them but only ever reports whether they are set.
 const SECRET_ROUTES: Record<string, SecretName> = { graph8: 'graph8ApiKey', claude: 'claudeToken' }
@@ -76,6 +89,55 @@ app.delete('/api/settings/:name', async (req, res) => {
     res.json(await secretStatus())
   } catch (err: any) {
     console.error('[settings] delete failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+app.get('/api/users', async (_req, res) => {
+  try {
+    res.json({ users: await listUsers() })
+  } catch (err: any) {
+    console.error('[users] list failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+app.post('/api/users', async (req, res) => {
+  const username = normalizeUsername(req.body?.username)
+  const invalid = validateUsername(username) ?? validatePassword(req.body?.password)
+  if (invalid) { res.status(400).json({ error: invalid }); return }
+  try {
+    res.json({ user: await createUser(username, req.body.password, parsePermissions(req.body?.permissions)) })
+  } catch (err: any) {
+    if (err.code === 11000) { res.status(409).json({ error: 'That username is taken.' }); return }
+    console.error('[users] create failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+app.patch('/api/users/:id', async (req, res) => {
+  const { permissions, disabled, password, approve } = req.body ?? {}
+  if (password !== undefined) {
+    const invalid = validatePassword(password)
+    if (invalid) { res.status(400).json({ error: invalid }); return }
+  }
+  try {
+    const user = await updateUser(req.params.id, { permissions, disabled, password, approve })
+    if (!user) { res.status(404).json({ error: 'User not found' }); return }
+    res.json({ user })
+  } catch (err: any) {
+    console.error('[users] update failed:', err.message)
+    res.status(503).json({ error: settingsError(err) })
+  }
+})
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
+    await deleteSearchesFor(req.params.id)
+    res.json({ deleted: true })
+  } catch (err: any) {
+    console.error('[users] delete failed:', err.message)
     res.status(503).json({ error: settingsError(err) })
   }
 })
@@ -131,6 +193,8 @@ interface DiscoverBody {
   hasPhone?: boolean
   limit?: number
   page?: number
+  // false for searches the app runs on its own (e.g. the first load), so only real queries are saved.
+  save?: boolean
 }
 
 // "Food in Pakistan" -> industry "Food", location "Pakistan"
@@ -182,9 +246,30 @@ async function resolveLocation(value: string): Promise<{ value: string; field: L
   return best ? { value: best.value, field: best.field } : { value, field: 'city' }
 }
 
+// Only the known filter fields are stored, never the raw request body.
+function savedFilters(b: DiscoverBody) {
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 50) : [])
+  return {
+    industries: strings(b.industries),
+    locations: (Array.isArray(b.locations) ? b.locations : [])
+      .filter(l => typeof l?.value === 'string')
+      .slice(0, 50)
+      .map(l => ({ value: l.value, ...(l.field && ['city', 'country', 'state'].includes(l.field) ? { field: l.field } : {}) })),
+    keywords: strings(b.keywords),
+    employees: strings(b.employees),
+    revenue: strings(b.revenue),
+    foundedFrom: typeof b.foundedFrom === 'number' ? b.foundedFrom : undefined,
+    foundedTo: typeof b.foundedTo === 'number' ? b.foundedTo : undefined,
+    website: b.website === 'has' || b.website === 'none' ? b.website : 'any',
+    hasPhone: b.hasPhone === true,
+    limit: typeof b.limit === 'number' ? b.limit : 20,
+  }
+}
+
 // Pipeline step 1: fetch real leads from Graph8, then step 2: run our gap analysis on each.
 app.post('/api/leads/discover', async (req, res) => {
-  const body = { ...(req.body as DiscoverBody) }
+  const { save = true, ...asked } = (req.body ?? {}) as DiscoverBody
+  const body: DiscoverBody = { ...asked }
   if (body.prompt?.trim()) {
     const p = parsePrompt(body.prompt)
     if (p.industry) body.industries = [...(body.industries ?? []), p.industry]
@@ -227,8 +312,20 @@ app.post('/api/leads/discover', async (req, res) => {
       return transformToLead(contact, company, analyzeWebsite(company.domain || `${company.name}|${company.city}`, !company.domain))
     })
 
+    // History is a convenience: a failed save must not lose the search the user just paid for.
+    const searchId = save
+      ? await saveSearch(getAuth(res), {
+          prompt: asked.prompt?.trim() ?? '',
+          filters: savedFilters(asked),
+          matchedOn,
+          total: companyRes.pagination.total,
+          leads,
+        }).catch(err => { console.error('[history] save failed:', err.message); null })
+      : null
+
     res.json({
       leads,
+      searchId,
       source: 'graph8',
       total: companyRes.pagination.total,
       hasMore: companyRes.pagination.has_next,
@@ -323,8 +420,40 @@ app.post('/api/leads/enrich', async (req, res) => {
   }
 })
 
+// Saved searches. Reading them needs no Graph8 access: the results are already stored.
+app.get('/api/searches', async (_req, res) => {
+  try {
+    res.json({ searches: await listSearches(getAuth(res)) })
+  } catch (err: any) {
+    console.error('[history] list failed:', err.message)
+    res.status(503).json({ error: 'Could not load your search history.' })
+  }
+})
+
+app.get('/api/searches/:id', async (req, res) => {
+  try {
+    const search = await getSearch(getAuth(res), req.params.id)
+    if (!search) { res.status(404).json({ error: 'Search not found' }); return }
+    res.json({ search })
+  } catch (err: any) {
+    console.error('[history] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load that search.' })
+  }
+})
+
+app.delete('/api/searches/:id', async (req, res) => {
+  try {
+    if (!(await deleteSearch(getAuth(res), req.params.id))) { res.status(404).json({ error: 'Search not found' }); return }
+    res.json({ deleted: true })
+  } catch (err: any) {
+    console.error('[history] delete failed:', err.message)
+    res.status(503).json({ error: 'Could not delete that search.' })
+  }
+})
+
 // Audit a specific website
 app.get('/api/leads/audit', async (req, res) => {
+  const canUseGraph8 = getAuth(res).permissions.graph8
   try {
     const { domain } = req.query as Record<string, string>
     if (!domain) {
@@ -337,7 +466,7 @@ app.get('/api/leads/audit', async (req, res) => {
     // Try to enrich from Graph8
     let companyData = null
     try {
-      companyData = await enrichCompany(domain)
+      if (canUseGraph8) companyData = await enrichCompany(domain)
     } catch {
       // Enrichment optional
     }
@@ -354,7 +483,7 @@ app.get('/api/leads/audit', async (req, res) => {
 })
 
 // Get intent signals for a company
-app.get('/api/leads/:id/intent', async (req, res) => {
+app.get('/api/leads/:id/intent', needsGraph8, async (req, res) => {
   try {
     const signals = await getIntentSignals(req.params.id)
     res.json(signals)

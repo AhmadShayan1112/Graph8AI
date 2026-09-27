@@ -2,6 +2,7 @@ import { useEffect, useState, type FC } from 'react'
 import type { Lead } from '../types/lead'
 import { discoverLeads, EMPTY_FILTERS, type DiscoverFilters } from '../lib/api'
 import FilterPanel from '../components/FilterPanel'
+import { useSession } from '../components/LoginGate'
 
 interface Props {
   onSelectLead: (lead: Lead) => void
@@ -25,12 +26,19 @@ const TRY_PROMPTS = ['Dentists in Lahore', 'Restaurants in Karachi', 'SaaS in Du
 let lastFilters: DiscoverFilters = { ...EMPTY_FILTERS, industries: ['Dentists'], locations: [{ value: 'Lahore', field: 'city' }] }
 let lastTotal: number | null = null
 
+// Lets History reopen a saved search with the filters and match count it had.
+export function restoreDiscover(filters: DiscoverFilters, total: number) {
+  lastFilters = { ...EMPTY_FILTERS, ...filters }
+  lastTotal = total
+}
+
 function activeCount(f: DiscoverFilters) {
   return f.industries.length + f.locations.length + f.keywords.length + f.employees.length + f.revenue.length
     + (f.foundedFrom || f.foundedTo ? 1 : 0) + (f.website !== 'any' ? 1 : 0) + (f.hasPhone ? 1 : 0)
 }
 
 const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
+  const canSearch = useSession().user.permissions.graph8
   const [filters, setFiltersState] = useState<DiscoverFilters>(lastFilters)
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
@@ -41,11 +49,12 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
 
   const setFilters = (f: DiscoverFilters) => { lastFilters = f; setFiltersState(f) }
 
-  const runSearch = async (f: DiscoverFilters, promptText = '') => {
+  const runSearch = async (f: DiscoverFilters, promptText = '', save = true) => {
+    if (!canSearch) return
     setLoading(true)
     setError('')
     try {
-      const result = await discoverLeads({ ...f, prompt: promptText || undefined })
+      const result = await discoverLeads({ ...f, prompt: promptText || undefined }, save)
       setLeads(result.leads)
       setTotal(lastTotal = result.total)
       // Turn the prompt into real filter chips so the user can refine it.
@@ -58,8 +67,8 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
         })
         setPrompt('')
       }
-    } catch {
-      setError('Lead search failed. Try loosening a filter.')
+    } catch (err: any) {
+      setError(err.status === 403 ? err.message : 'Lead search failed. Try loosening a filter.')
       setLeads([])
     } finally {
       setLoading(false)
@@ -67,7 +76,8 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
   }
 
   useEffect(() => {
-    if (!leads.length) runSearch(filters)
+    // The first load is the app's own search, not the user's, so it is not saved to History.
+    if (!leads.length) runSearch(filters, '', false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -94,7 +104,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
         </div>
         <FilterPanel filters={filters} onChange={setFilters} />
         <div className="df-foot">
-          <button className="btn-primary full-width" onClick={search} disabled={loading}>
+          <button className="btn-primary full-width" onClick={search} disabled={loading || !canSearch}>
             {loading ? 'Searching…' : 'Apply filters'}
           </button>
         </div>
@@ -109,6 +119,12 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
           </div>
         </header>
 
+        {!canSearch && (
+          <div className="settings-alert access-note">
+            Lead search with Graph8 is turned off for your account. Ask the admin to enable it.
+          </div>
+        )}
+
         <div className="prompt-card">
           <div className="prompt-row">
             <span className="prompt-spark" aria-hidden>✦</span>
@@ -119,7 +135,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
               onKeyDown={e => e.key === 'Enter' && search()}
               placeholder="Describe who you want, e.g. Dentists in Lahore"
             />
-            <button className="btn-accent prompt-btn" onClick={search} disabled={loading}>
+            <button className="btn-accent prompt-btn" onClick={search} disabled={loading || !canSearch}>
               {loading ? 'Searching…' : 'Search leads →'}
             </button>
           </div>
