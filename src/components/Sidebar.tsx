@@ -1,6 +1,7 @@
 import { type FC, type ReactNode } from 'react'
 import { useSession } from './LoginGate'
 import { LogoMark } from './Logo'
+import { useTheme } from '../lib/theme'
 
 // Line icons drawn on a 24px grid; they inherit the item's text color.
 const ICONS: Record<string, ReactNode> = {
@@ -19,7 +20,22 @@ const ICONS: Record<string, ReactNode> = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1" /></>,
   tour: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" /></>,
   back: <><path d="M19 12H5" /><path d="m11 6-6 6 6 6" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" /></>,
+  moon: <><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></>,
   logout: <><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 16l-4-4 4-4" /><path d="M6 12h10" /></>,
+}
+
+// Switches between the light and dark workspace.
+export const ThemeToggle: FC<{ compact?: boolean }> = ({ compact }) => {
+  const { theme, toggle } = useTheme()
+  const label = theme === 'dark' ? 'Light mode' : 'Dark mode'
+  return (
+    <button className={compact ? 'theme-toggle-compact' : 'sidebar-item sidebar-item-quiet'} onClick={toggle}
+      aria-label={`Switch to ${label.toLowerCase()}`} title={`Switch to ${label.toLowerCase()}`} data-tour="theme">
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+      {!compact && label}
+    </button>
+  )
 }
 
 const Icon: FC<{ name: string }> = ({ name }) => (
@@ -103,6 +119,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack, s
           <Icon name="tour" />
           Take the tour
         </button>
+        <ThemeToggle />
         <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('back')} disabled={!canGoBack}>
           <Icon name="back" />
           Back

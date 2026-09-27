@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import Sidebar from './components/Sidebar'
+import Sidebar, { ThemeToggle } from './components/Sidebar'
 import LandingPage from './pages/LandingPage'
 import DiscoverPage, { restoreDiscover } from './pages/DiscoverPage'
 import AuditPage from './pages/AuditPage'
@@ -25,6 +25,7 @@ import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
 import { EMPTY_FILTERS, fetchJob, getSearch, getSupportSummary, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
+import { useTheme } from './lib/theme'
 import './App.css'
 
 // The app lives under `#/page[/id]`, so a refresh or bookmark reopens the same page. The site root
@@ -40,6 +41,7 @@ function readHash() {
 
 function App() {
   const [view, setView] = useState<'landing' | 'app'>(() => (readHash() ? 'app' : 'landing'))
+  useTheme(view === 'app')
 
   useEffect(() => {
     const onHash = () => setView(readHash() ? 'app' : 'landing')
@@ -343,6 +345,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           <span className="sidebar-name">Gapwise</span>
         </button>
         <span className="mobile-topbar-user">{user.username}</span>
+        <ThemeToggle compact />
         <GapRunnerChip compact onOpen={openGapRun} onOpenBuild={openBuildJob} />
       </header>
 

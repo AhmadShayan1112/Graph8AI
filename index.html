@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gapwise — Outreach that arrives as a working solution</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Set the theme before the first paint so dark mode never flashes light. The landing page (no #/ route) stays light.
+      try {
+        var t = localStorage.getItem('gapwise:theme')
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = /^#\/[a-z]/.test(location.hash) ? t : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

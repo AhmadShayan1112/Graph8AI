@@ -121,7 +121,7 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId, o
           <div key={cat.label} className="category-card fade-in" style={{ animationDelay: `${i * 0.08}s` }}>
             <div className="category-ring">
               <svg width="52" height="52" viewBox="0 0 52 52">
-                <circle cx="26" cy="26" r="22" fill="none" stroke="#EEEEEA" strokeWidth="4" />
+                <circle cx="26" cy="26" r="22" fill="none" strokeWidth="4" style={{ stroke: 'var(--c-eeeeea)' }} />
                 <circle
                   cx="26" cy="26" r="22"
                   fill="none" stroke={cat.color} strokeWidth="4"
