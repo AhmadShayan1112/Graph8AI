@@ -45,7 +45,8 @@ app.use(express.json({ limit: '1mb' }))
 // No API response is ever cacheable: some carry settings status, none should sit in a shared cache.
 app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next() })
 
-app.get('/api/health', (_req, res) => { res.json({ status: 'ok' }) })
+// `commit` shows which deployment is live (Vercel sets VERCEL_GIT_COMMIT_SHA).
+app.get('/api/health', (_req, res) => { res.json({ status: 'ok', commit: (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7) }) })
 app.get('/api/auth/session', session)
 app.post('/api/auth/login', login)
 app.post('/api/auth/logout', logout)

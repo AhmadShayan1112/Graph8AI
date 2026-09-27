@@ -199,7 +199,12 @@ export function normalizeModules(raw: unknown): MvpModule[] {
     id: 'account', name: 'Log in', access: 'public', purpose: 'Customer sign up, log in, log out and profile.',
     features: ['Sign up with name, email and password', 'Log in and log out', 'Profile with the customer\'s details and activity'], data: 'users, session',
   }
-  return [{ ...home, access: 'public' }, { ...account, access: 'public' }, ...unique.filter(m => m.id !== 'home' && m.id !== 'account')].slice(0, 7)
+  const ordered: MvpModule[] = [
+    { ...home, access: 'public' as const },
+    { ...account, access: 'public' as const },
+    ...unique.filter(m => m.id !== 'home' && m.id !== 'account'),
+  ]
+  return ordered.slice(0, 7)
 }
 
 // ── 4. Builder ──
