@@ -62,6 +62,9 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
   gap analysis, never names the AI provider, and is limited to 30 messages per person per 10 minutes.
 - **Talk to a person** in the assistant sends the question and the chat so far to the admin as a support
   request (`support_tickets`). The person follows it under **My requests**; a red dot shows new replies.
+- The landing page has the same chat button with a **public** assistant for visitors (`/api/public/assistant`,
+  no sign-in; 15 messages per visitor per 10 minutes and 300 per hour overall). Its **Talk to a person** is a
+  contact form (name, email, question) that lands in Support with the visitor's email to reply to.
 - The admin answers in **Support** (menu shows the open count): filter Open / Answered / Closed, read the
   request with its chat and page, reply, close or reopen.
 

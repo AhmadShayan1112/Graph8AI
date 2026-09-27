@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FC, type FormEvent, type KeyboardEvent } from 'react'
 import {
-  askAssistant, createTicket, getSupportSummary, getTicket, listTickets, replyToTicket, setTicketStatus,
+  askAssistant, contactTeam, createTicket, getSupportSummary, getTicket, listTickets, replyToTicket, setTicketStatus,
   type ChatMessage, type Ticket, type TicketSummary,
 } from '../lib/api'
 import { useSession } from './LoginGate'
@@ -10,9 +10,9 @@ import { LogoMark } from './Logo'
 interface Props {
   page: string
   onRoute: (hash: string) => void
+  // On the public website: visitor assistant, no account features, and a contact form for the team.
+  publicSite?: boolean
 }
-
-const STORE = 'gapwise:assistant'
 
 // Starting questions that fit the page the person is on.
 const SUGGESTIONS: Record<string, string[]> = {
@@ -28,20 +28,22 @@ const SUGGESTIONS: Record<string, string[]> = {
   settings: ['Which keys do I need?', 'What happens if I delete a key?'],
 }
 const DEFAULT_SUGGESTIONS = ['How does Gapwise work?', 'Where do I start?', 'How do I run a gap analysis?']
+const PUBLIC_SUGGESTIONS = ['What does Gapwise do?', 'Who is Gapwise for?', 'How does the gap analysis work?', 'How do I get started?']
 
 const STATUS_LABEL: Record<string, string> = { open: 'Waiting for reply', answered: 'Answered', closed: 'Closed' }
 
-function loadChat(): ChatMessage[] {
-  try { return JSON.parse(sessionStorage.getItem(STORE) || '[]') } catch { return [] }
+function loadChat(key: string): ChatMessage[] {
+  try { return JSON.parse(sessionStorage.getItem(key) || '[]') } catch { return [] }
 }
 
-const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
+const AssistantWidget: FC<Props> = ({ page, onRoute, publicSite = false }) => {
   const { user } = useSession()
+  const STORE = publicSite ? 'gapwise:assistant:public' : 'gapwise:assistant'
   // The admin is the human support, so they answer on the Support page rather than opening requests here.
-  const isAdmin = user.role === 'admin'
+  const isAdmin = !publicSite && user.role === 'admin'
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'chat' | 'requests'>('chat')
-  const [messages, setMessages] = useState<ChatMessage[]>(loadChat)
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat(STORE))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -53,16 +55,16 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
 
   useEffect(() => {
     try { sessionStorage.setItem(STORE, JSON.stringify(messages.slice(-40))) } catch { /* ignore */ }
-  }, [messages])
+  }, [messages, STORE])
 
   // Replies from the admin: check now and every minute so the badge shows up without a refresh.
   useEffect(() => {
-    if (user.role === 'admin') return
+    if (publicSite || user.role === 'admin') return
     const check = () => getSupportSummary().then(r => setUnread(r.waiting)).catch(() => {})
     check()
     const t = setInterval(check, 60_000)
     return () => clearInterval(t)
-  }, [user.role])
+  }, [user.role, publicSite])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -96,7 +98,7 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
           next[next.length - 1] = { role: 'assistant', content: next[next.length - 1].content + piece }
           return next
         })
-      }, ctrl.signal)
+      }, ctrl.signal, publicSite)
     } catch (err: any) {
       if (err.name !== 'AbortError') setError(err.message)
       // Drop an empty reply bubble; keep whatever did arrive.
@@ -131,7 +133,7 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
     if (window.matchMedia('(max-width: 600px)').matches) setOpen(false)
   }
 
-  const suggestions = SUGGESTIONS[page] ?? DEFAULT_SUGGESTIONS
+  const suggestions = publicSite ? PUBLIC_SUGGESTIONS : SUGGESTIONS[page] ?? DEFAULT_SUGGESTIONS
 
   return (
     <>
@@ -158,7 +160,7 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
             <LogoMark size={28} />
             <div className="assist-head-text">
               <div className="assist-title">Gapwise assistant</div>
-              <div className="assist-sub">Answers about using Gapwise</div>
+              <div className="assist-sub">{publicSite ? 'Questions about Gapwise, answered' : 'Answers about using Gapwise'}</div>
             </div>
             <button className="assist-icon-btn" onClick={newChat} title="Start a new chat" aria-label="Start a new chat">
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
@@ -175,9 +177,11 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
           ) : (
             <div className="assist-tabs" role="tablist">
               <button role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>Assistant</button>
-              <button role="tab" aria-selected={tab === 'requests'} className={tab === 'requests' ? 'active' : ''} onClick={() => { setTab('requests'); setHandoff(null) }}>
-                My requests{unread > 0 && <span className="assist-tab-dot" />}
-              </button>
+              {!publicSite && (
+                <button role="tab" aria-selected={tab === 'requests'} className={tab === 'requests' ? 'active' : ''} onClick={() => { setTab('requests'); setHandoff(null) }}>
+                  My requests{unread > 0 && <span className="assist-tab-dot" />}
+                </button>
+              )}
               {tab === 'chat' && handoff === null && (
                 <button className="assist-human" onClick={startHandoff}>Talk to a person</button>
               )}
@@ -189,7 +193,11 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
               <div className="assist-body" ref={listRef} aria-live="polite">
                 {!messages.length && (
                   <div className="assist-welcome">
-                    <p>Hi {user.username}, I can help you find leads, run gap analysis, build MVPs and write outreach. What would you like to do?</p>
+                    <p>
+                      {publicSite
+                        ? 'Hi! I can tell you what Gapwise does, how it works and how to get started. What would you like to know?'
+                        : `Hi ${user.username}, I can help you find leads, run gap analysis, build MVPs and write outreach. What would you like to do?`}
+                    </p>
                     <div className="assist-chips">
                       {suggestions.map(q => <button key={q} onClick={() => send(q)}>{q}</button>)}
                     </div>
@@ -232,7 +240,15 @@ const AssistantWidget: FC<Props> = ({ page, onRoute }) => {
             </>
           )}
 
-          {tab === 'chat' && handoff !== null && (
+          {tab === 'chat' && handoff !== null && publicSite && (
+            <VisitorContact
+              initial={handoff}
+              transcript={messages}
+              onCancel={() => setHandoff(null)}
+            />
+          )}
+
+          {tab === 'chat' && handoff !== null && !publicSite && (
             <Handoff
               initial={handoff}
               transcript={messages}
@@ -288,6 +304,66 @@ const Handoff: FC<{
       <div className="assist-handoff-actions">
         <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>Back to chat</button>
         <button type="submit" className="btn-primary" disabled={busy || !text.trim()}>{busy ? 'Sending…' : 'Send to support'}</button>
+      </div>
+    </form>
+  )
+}
+
+// Visitors have no account, so the team replies by email.
+const VisitorContact: FC<{ initial: string; transcript: ChatMessage[]; onCancel: () => void }> = ({ initial, transcript, onCancel }) => {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [text, setText] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await contactTeam(name.trim(), email.trim(), text, transcript)
+      setSent(true)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="assist-body assist-handoff">
+        <div className="assist-handoff-title">Message sent</div>
+        <p className="assist-note">Thanks, {name.split(' ')[0] || 'there'}. The Gapwise team will reply to <strong>{email}</strong>.</p>
+        <div className="assist-handoff-actions"><button className="btn-secondary" onClick={onCancel}>Back to chat</button></div>
+      </div>
+    )
+  }
+
+  return (
+    <form className="assist-body assist-handoff" onSubmit={submit}>
+      <div className="assist-handoff-title">Talk to a person</div>
+      <p className="assist-note">
+        Send your question to the Gapwise team{transcript.length ? ' with this chat' : ''}. They reply by email.
+      </p>
+      <label className="auth-field">
+        <span className="settings-card-label">Your name</span>
+        <input className="input" value={name} maxLength={80} autoComplete="name" onChange={e => setName(e.target.value)} autoFocus />
+      </label>
+      <label className="auth-field">
+        <span className="settings-card-label">Email</span>
+        <input className="input" type="email" value={email} maxLength={200} autoComplete="email" onChange={e => setEmail(e.target.value)} />
+      </label>
+      <label className="auth-field">
+        <span className="settings-card-label">How can we help?</span>
+        <textarea className="input assist-textarea" value={text} maxLength={4000} rows={4} onChange={e => setText(e.target.value)} />
+      </label>
+      {error && <div className="settings-message bad">{error}</div>}
+      <div className="assist-handoff-actions">
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>Back to chat</button>
+        <button type="submit" className="btn-primary" disabled={busy || !name.trim() || !email.trim() || !text.trim()}>{busy ? 'Sending…' : 'Send'}</button>
       </div>
     </form>
   )
@@ -393,6 +469,7 @@ export const TicketThread: FC<{ id: string; onBack: () => void; asAdmin?: boolea
             <div className="assist-handoff-title">{ticket.subject}</div>
             <div className="assist-note">
               {asAdmin && <>From <strong>{ticket.username}</strong>{ticket.page && <> on the {ticket.page} page</>}, </>}
+              {asAdmin && ticket.contactEmail && <>reply to <a href={`mailto:${ticket.contactEmail}?subject=${encodeURIComponent(`Re: ${ticket.subject}`)}`}>{ticket.contactEmail}</a>, </>}
               opened {new Date(ticket.createdAt).toLocaleString()} · <span className={`assist-status ${ticket.status}`}>{STATUS_LABEL[ticket.status]}</span>
             </div>
           </div>
@@ -412,6 +489,9 @@ export const TicketThread: FC<{ id: string; onBack: () => void; asAdmin?: boolea
               {m.text}
             </div>
           ))}
+          {asAdmin && ticket.visitor && (
+            <div className="assist-note">This visitor has no account and won’t see replies here. Email them, then note your answer below and close the request.</div>
+          )}
           <form className="assist-reply" onSubmit={send}>
             <textarea
               className="input assist-textarea"

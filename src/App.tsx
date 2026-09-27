@@ -44,7 +44,13 @@ function App() {
   }, [])
 
   if (view === 'landing') {
-    return <LandingPage onEnterApp={() => { window.location.hash = '#/dashboard'; setView('app') }} />
+    return (
+      <>
+        <LandingPage onEnterApp={() => { window.location.hash = '#/dashboard'; setView('app') }} />
+        {/* Visitors get the public assistant; its links into the app (#/...) open sign-in. */}
+        <AssistantWidget publicSite page="landing" onRoute={hash => { window.location.hash = hash }} />
+      </>
+    )
   }
 
   return (

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import { ObjectId } from 'mongodb'
 import { getDb } from './db.js'
 import { getAuth, type AuthInfo } from './auth.js'
+import { allow, clientIp } from './assistant.js'
 
 // Human support: a user hands a question (and the assistant chat that led to it) to the admin, and the
 // two reply back and forth on the request until it is closed.
@@ -12,6 +13,8 @@ interface TicketDoc {
   _id: ObjectId
   ownerId: string
   username: string
+  // Visitors from the public site have no account, so the admin answers them by email.
+  contactEmail?: string
   subject: string
   page: string
   transcript: Array<{ role: 'user' | 'assistant'; content: string }>
@@ -46,6 +49,8 @@ function toPublic(t: TicketDoc, auth: AuthInfo, full: boolean) {
   return {
     id: String(t._id),
     username: t.username,
+    visitor: t.ownerId === 'visitor',
+    contactEmail: isAdmin(auth) ? t.contactEmail ?? null : null,
     mine: t.ownerId === ownerOf(auth),
     subject: t.subject,
     page: t.page,
@@ -99,6 +104,50 @@ export async function createTicket(req: Request, res: Response) {
   } catch (err: any) {
     console.error('[support] create failed:', err.message)
     res.status(503).json({ error: 'Could not send your request. Try again shortly.' })
+  }
+}
+
+// "Talk to a person" from the public site: name, email and question, plus the chat that led to it.
+export async function createVisitorTicket(req: Request, res: Response) {
+  const name = text(req.body?.name, 80)
+  const email = text(req.body?.email, 200).toLowerCase()
+  const message = text(req.body?.message, 4000)
+  if (!name || !message) { res.status(400).json({ error: 'Add your name and your question.' }); return }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { res.status(400).json({ error: 'Enter a valid email address so the team can reply.' }); return }
+  if (!allow(`ticket:${clientIp(req)}`, 3, 3600_000)) {
+    res.status(429).json({ error: 'You have already sent a few messages. The team will reply by email.' })
+    return
+  }
+  const transcript = (Array.isArray(req.body?.transcript) ? req.body.transcript : [])
+    .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string')
+    .slice(-20)
+    .map((m: any) => ({ role: m.role, content: String(m.content).slice(0, 2000) }))
+  try {
+    const col = await tickets()
+    if ((await col.countDocuments({ ownerId: 'visitor', createdAt: { $gt: new Date(Date.now() - 3600_000) } })) >= 30) {
+      res.status(429).json({ error: 'We are receiving a lot of messages right now. Try again later.' })
+      return
+    }
+    const now = new Date()
+    await col.insertOne({
+      _id: new ObjectId(),
+      ownerId: 'visitor',
+      username: `${name} (visitor)`,
+      contactEmail: email,
+      subject: message.split('\n')[0].slice(0, 120),
+      page: 'website',
+      transcript,
+      messages: [{ from: 'user', name, text: message, at: now }],
+      status: 'open',
+      unreadForUser: false,
+      unreadForAdmin: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    res.json({ sent: true })
+  } catch (err: any) {
+    console.error('[support] visitor request failed:', err.message)
+    res.status(503).json({ error: 'Could not send your message. Try again shortly.' })
   }
 }
 

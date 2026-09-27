@@ -31,8 +31,8 @@ import {
 } from './campaigns.js'
 import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
 import { GeminiError } from './gemini.js'
-import { assistantChat } from './assistant.js'
-import { createTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
+import { assistantChat, publicAssistantChat } from './assistant.js'
+import { createTicket, createVisitorTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
 
 export const app = express()
 app.disable('x-powered-by')
@@ -46,6 +46,10 @@ app.get('/api/auth/session', session)
 app.post('/api/auth/login', login)
 app.post('/api/auth/logout', logout)
 app.post('/api/auth/signup', signUp)
+
+// The public site's assistant and its "talk to a person" form work without signing in (rate-limited).
+app.post('/api/public/assistant', publicAssistantChat)
+app.post('/api/public/contact', createVisitorTicket)
 
 // Deployed MVP sites are public so leads can open them.
 app.get(['/api/site/:slug', '/:slug'], serveSite)

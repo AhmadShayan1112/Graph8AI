@@ -336,8 +336,11 @@ export const getDashboard = () => apiFetch<Dashboard>('/dashboard')
 export interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
 // Streams the assistant's reply: `onText` receives each new piece as it is written.
-export async function askAssistant(messages: ChatMessage[], page: string, onText: (text: string) => void, signal?: AbortSignal) {
-  const res = await fetch(`${BASE}/assistant/chat`, {
+// `publicSite` uses the visitor assistant, which works without signing in.
+export async function askAssistant(
+  messages: ChatMessage[], page: string, onText: (text: string) => void, signal?: AbortSignal, publicSite = false,
+) {
+  const res = await fetch(`${BASE}${publicSite ? '/public/assistant' : '/assistant/chat'}`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
@@ -346,7 +349,7 @@ export async function askAssistant(messages: ChatMessage[], page: string, onText
   })
   if (!res.ok || !res.body) {
     const body = await res.json().catch(() => null)
-    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    if (res.status === 401 && !publicSite) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
     throw new ApiError(body?.error || `API error: ${res.status}`, res.status)
   }
   const reader = res.body.getReader()
@@ -373,6 +376,9 @@ export type TicketStatus = 'open' | 'answered' | 'closed'
 export interface TicketSummary {
   id: string
   username: string
+  visitor: boolean
+  // Only sent to the admin, for visitors from the public site.
+  contactEmail: string | null
   mine: boolean
   subject: string
   page: string
@@ -398,3 +404,7 @@ export const replyToTicket = (id: string, text: string) =>
   apiFetch<{ ticket: Ticket }>(`/support/tickets/${id}/replies`, { method: 'POST', body: JSON.stringify({ text }) })
 export const setTicketStatus = (id: string, status: 'open' | 'closed') =>
   apiFetch<{ ticket: Ticket }>(`/support/tickets/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+
+// "Talk to a person" from the public site, where visitors have no account.
+export const contactTeam = (name: string, email: string, message: string, transcript: ChatMessage[]) =>
+  apiFetch<{ sent: boolean }>('/public/contact', { method: 'POST', body: JSON.stringify({ name, email, message, transcript }) })
