@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react'
+import { LogoMark } from '../components/Logo'
 
 interface Props {
   onEnterApp: () => void
@@ -249,7 +250,7 @@ const LandingPage: FC<Props> = ({ onEnterApp }) => {
       <nav className="landing-nav">
         <div className="landing-nav-inner">
           <div className="landing-brand">
-            <div className="sidebar-logo"><div className="sidebar-logo-dot" /></div>
+            <LogoMark size={28} />
             <div className="landing-brand-name">Gapwise</div>
           </div>
           <div className="landing-links">

@@ -1,5 +1,6 @@
 import { type FC, type ReactNode } from 'react'
 import { useSession } from './LoginGate'
+import { LogoMark } from './Logo'
 
 // Line icons drawn on a 24px grid; they inherit the item's text color.
 const ICONS: Record<string, ReactNode> = {
@@ -67,9 +68,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-dot" />
-        </div>
+        <LogoMark size={26} />
         <div className="sidebar-name">Gapwise</div>
       </div>
 

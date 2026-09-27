@@ -13,6 +13,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import AnalysisPage from './pages/AnalysisPage'
 import GapAnalysisPage from './pages/GapAnalysisPage'
 import LoginGate, { useSession } from './components/LoginGate'
+import { LogoMark } from './components/Logo'
 import { EMPTY_FILTERS, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
 import './App.css'
@@ -150,7 +151,7 @@ function Workspace() {
           <span /><span /><span />
         </button>
         <div className="sidebar-brand mobile-topbar-brand">
-          <div className="sidebar-logo"><div className="sidebar-logo-dot" /></div>
+          <LogoMark size={26} />
           <div className="sidebar-name">Gapwise</div>
         </div>
         <span className="mobile-topbar-user">{user.username}</span>
