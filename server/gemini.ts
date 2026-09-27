@@ -48,18 +48,16 @@ async function availableModels(key: string) {
   }
 }
 
-// The admin's choice in Settings comes first (then GEMINI_MODEL), then the model that last worked, then the
-// cheap-first list. If the chosen model is out of quota the others still keep things running. Only models
-// this key actually offers are kept when the list could be read.
+// The admin's model order from Settings is followed exactly: model 1, then model 2 when it fails, and so on.
+// Unless the admin limited it to that list, the other models the key offers follow (the one that last
+// worked first, then cheapest first). With no list, it is fully automatic, starting from GEMINI_MODEL.
 async function candidates(key: string) {
   const choice = await getGeminiModel()
-  // "Only this model": no fallback, the admin's choice or nothing.
-  if (choice.model && choice.strict) return [choice.model]
-  const chosen = choice.model || process.env.GEMINI_MODEL || ''
+  if (choice.models.length && choice.strict) return choice.models
   const offered = await availableModels(key)
-  const wanted = [chosen, workingModel, ...PREFERRED, ...offered].filter((m): m is string => !!m)
-  const usable = offered.length ? wanted.filter(m => m === chosen || offered.includes(m)) : wanted
-  return [...new Set(usable)].slice(0, 6)
+  const rest = [workingModel, ...PREFERRED, ...offered].filter((m): m is string => !!m && (!offered.length || offered.includes(m)))
+  const first = choice.models.length ? choice.models : [process.env.GEMINI_MODEL].filter((m): m is string => !!m)
+  return [...new Set([...first, ...rest])].slice(0, Math.max(6, first.length + 2))
 }
 
 // For the Settings dropdown: every Gemini text model this key can call, cheapest first.

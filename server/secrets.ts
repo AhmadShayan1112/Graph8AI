@@ -11,10 +11,12 @@ interface SettingsDoc {
   claudeTokenUpdatedAt?: Date
   geminiApiKey?: string
   geminiApiKeyUpdatedAt?: Date
-  // The Gemini model the admin chose; empty means automatic (cheapest available).
-  geminiModel?: string
-  // true: use only the chosen model, never fall back to another.
+  // The admin's model order: try the first, then the next when one fails. Empty means automatic.
+  geminiModels?: string[]
+  // true: use only the listed models, never other ones the key offers.
   geminiModelStrict?: boolean
+  // Older single-model setting, read as a one-item list.
+  geminiModel?: string
   // Workspace-wide access the admin grants to every user on top of their own switches.
   graph8ForEveryone?: boolean
   geminiForEveryone?: boolean
@@ -104,12 +106,15 @@ export async function setWorkspaceAccess(access: Partial<WorkspaceAccess>) {
 }
 
 // Read on every model call, so a short per-instance cache avoids a DB read each time.
-export interface ModelChoice { model: string; strict: boolean }
+export interface ModelChoice { models: string[]; strict: boolean }
 let modelCache: { value: ModelChoice; at: number } | null = null
 export async function getGeminiModel(): Promise<ModelChoice> {
   if (modelCache && Date.now() - modelCache.at < 15_000) return modelCache.value
-  const doc = await (await settings()).findOne({ _id: 'app' }, { projection: { geminiModel: 1, geminiModelStrict: 1 } }).catch(() => null)
-  const value = { model: doc?.geminiModel ?? '', strict: !!doc?.geminiModel && doc?.geminiModelStrict === true }
+  const doc = await (await settings()).findOne(
+    { _id: 'app' }, { projection: { geminiModels: 1, geminiModel: 1, geminiModelStrict: 1 } },
+  ).catch(() => null)
+  const models = doc?.geminiModels?.length ? doc.geminiModels : doc?.geminiModel ? [doc.geminiModel] : []
+  const value = { models, strict: models.length > 0 && doc?.geminiModelStrict === true }
   modelCache = { value, at: Date.now() }
   return value
 }
@@ -117,9 +122,9 @@ export async function getGeminiModel(): Promise<ModelChoice> {
 export async function setGeminiModel(choice: ModelChoice) {
   await (await settings()).updateOne(
     { _id: 'app' },
-    choice.model
-      ? { $set: { geminiModel: choice.model, geminiModelStrict: choice.strict } }
-      : { $unset: { geminiModel: '', geminiModelStrict: '' } },
+    choice.models.length
+      ? { $set: { geminiModels: choice.models, geminiModelStrict: choice.strict }, $unset: { geminiModel: '' } }
+      : { $unset: { geminiModels: '', geminiModel: '', geminiModelStrict: '' } },
     { upsert: true },
   )
   modelCache = null

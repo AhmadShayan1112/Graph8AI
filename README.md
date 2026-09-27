@@ -29,7 +29,7 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 - For each user the admin switches **Claude** (MVP generation) and **Graph8** (lead search and enrichment)
   on or off. Users share the workspace keys but never see them. Access is checked on the server for every
   request, so a change, disable or delete takes effect immediately. A password reset signs that user out.
-- **Graph8 for everyone** and **Gemini for everyone** (Users page) open that key to every user, including new sign-ups, on top of their own
+- **Graph8 for everyone** and **Gap analysis for everyone** (Users page) open that key to every user, including new sign-ups, on top of their own
   switches. Turning it off returns to per-user access. Claude always stays per user.
 - User passwords are hashed with scrypt in the `users` collection.
 - Every lead search is saved with its results in the `searches` collection (latest 200 per person).
@@ -53,6 +53,27 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
   cover, their health scores and most common gaps.
 - Market numbers are stored in `campaign_analysis` and only recomputed when someone clicks
   **Refresh from Graph8**, which needs Graph8 access.
+
+## Gap analysis (Graph8 + Gemini)
+
+- The admin saves a **Gemini API key** in **Settings** (encrypted like the other keys) and switches **Gap analysis**
+  on per user (or for everyone) in **Users**. Users only ever see "gap analysis", never the provider.
+- **Gap analysis** lists a campaign's saved leads. Per lead, the server takes Graph8's company record (when the user
+  has Graph8 access) and has Gemini research the business with Google Search: gaps with evidence, what it is likely
+  looking for, and a prospect profile (fit score, offer, pitch, talking points, email opener) with sources.
+  Results are stored in `gap_analyses`, one per campaign lead.
+- Runs live in an app-wide runner: they continue while you use other pages, show progress in the sidebar, and
+  resume after a refresh. A lead that hits a usage limit is retried up to 5 times (30 s, 60 s, …) before pausing.
+
+### Choosing Gemini models
+
+- Settings → Gemini API key → **Model order**. Empty = *Automatic*: the cheapest model the key can use
+  (Flash-Lite first), falling back to others when one is out of quota.
+- Or set your own order: model 1, then model 2 if it fails, then model 3, … (up to 10, from the models the key
+  offers). "If every model in this list fails, try the other models this key offers" is on by default.
+- On a usage limit (429), calls cycle through the order with growing waits (up to 45 s for the assistant, 2 min for
+  research). **Test key** shows which model answers or Google's exact error; the admin also sees Google's reason in
+  error messages. `GEMINI_MODEL` is a server-side default used only when no order is set.
 
 ## Assistant and human support
 

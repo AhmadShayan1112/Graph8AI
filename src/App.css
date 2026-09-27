@@ -2549,6 +2549,14 @@ body {
 @media (prefers-reduced-motion: reduce) { .runner-dot { animation: none; } .runner-chip-bar span { transition: none; } }
 
 .model-picker { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 12px; border-top: 1px solid #F0F0EC; }
+.model-chain { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.model-chain li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.model-chain .input { width: 100%; min-width: 0; height: 36px; }
+.model-chain-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #EEF0FB; color: oklch(0.42 0.14 262); font-size: 12px; font-weight: 600; }
+.model-chain-actions { display: flex; gap: 2px; }
+.model-chain-actions .assist-icon-btn { width: 30px; height: 30px; font-size: 14px; }
+.model-chain-actions .assist-icon-btn:disabled { opacity: 0.35; cursor: default; }
+.model-chain-then { grid-column: 2; font-size: 11.5px; color: #9A9DA5; padding-left: 2px; }
 .model-fallback { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #3C4049; cursor: pointer; }
 .model-fallback input { margin-top: 3px; accent-color: #2C5DBD; }
 .key-checks { list-style: none; margin: 4px 0 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #FAFAF8; border-radius: 6px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }

@@ -416,8 +416,8 @@ export const testGeminiKey = () =>
 
 export interface GeminiModelOption { id: string; label: string; cheap: boolean }
 export const getGeminiModels = () =>
-  apiFetch<{ current: string; strict: boolean; inUse: string | null; models: GeminiModelOption[]; error: string }>('/settings-model/gemini')
-// An empty model means automatic: the cheapest model the key can use, with fallback.
-// `strict` uses only the chosen model and never falls back.
-export const setGeminiModel = (model: string, strict: boolean) =>
-  apiFetch<{ current: string; strict: boolean }>('/settings-model/gemini', { method: 'PUT', body: JSON.stringify({ model, strict }) })
+  apiFetch<{ order: string[]; strict: boolean; inUse: string | null; models: GeminiModelOption[]; error: string }>('/settings-model/gemini')
+// The order to try models in: the first, then the next when one fails. An empty list means automatic.
+// `strict` uses only the listed models and never others.
+export const setGeminiModel = (models: string[], strict: boolean) =>
+  apiFetch<{ order: string[]; strict: boolean }>('/settings-model/gemini', { method: 'PUT', body: JSON.stringify({ models, strict }) })

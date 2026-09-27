@@ -121,7 +121,7 @@ app.post('/api/settings-test/gemini', requireAdmin, async (_req, res) => {
 app.get('/api/settings-model/gemini', requireAdmin, async (_req, res) => {
   try {
     const [choice, list] = await Promise.all([getGeminiModel(), listGeminiModels()])
-    res.json({ current: choice.model, strict: choice.strict, inUse: modelInUse(), ...list })
+    res.json({ order: choice.models, strict: choice.strict, inUse: modelInUse(), ...list })
   } catch (err: any) {
     console.error('[settings] model list failed:', err.message)
     res.status(502).json({ error: 'Could not load the model list.' })
@@ -129,13 +129,15 @@ app.get('/api/settings-model/gemini', requireAdmin, async (_req, res) => {
 })
 
 app.put('/api/settings-model/gemini', requireAdmin, async (req, res) => {
-  const model = typeof req.body?.model === 'string' ? req.body.model.trim() : ''
-  const strict = req.body?.strict === true
-  if (model && !/^[a-z0-9][a-z0-9.\-]{2,80}$/.test(model)) { res.status(400).json({ error: 'That is not a valid model name.' }); return }
+  const raw: unknown[] = Array.isArray(req.body?.models) ? req.body.models : []
+  const models = [...new Set(raw.filter((m): m is string => typeof m === 'string').map(m => m.trim()).filter(Boolean))]
+  if (models.length > 10) { res.status(400).json({ error: 'Choose at most 10 models.' }); return }
+  if (models.some(m => !/^[a-z0-9][a-z0-9.\-]{2,80}$/.test(m))) { res.status(400).json({ error: 'One of the model names is not valid.' }); return }
+  const strict = models.length > 0 && req.body?.strict === true
   try {
-    await setGeminiModel({ model, strict: !!model && strict })
+    await setGeminiModel({ models, strict })
     resetModelChoice()
-    res.json({ current: model, strict: !!model && strict })
+    res.json({ order: models, strict })
   } catch (err: any) {
     console.error('[settings] model save failed:', err.message)
     res.status(503).json({ error: settingsError(err) })

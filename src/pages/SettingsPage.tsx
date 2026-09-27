@@ -199,12 +199,12 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
 
 export default SettingsPage
 
-// Which Gemini model to use. Automatic picks the cheapest model this key can use and falls back if one is
-// out of quota. A chosen model is tried first; with fallback on, others take over when it is busy, and with
-// fallback off only the chosen model is ever used.
+// The Gemini models to use, in order: model 1 first, model 2 when model 1 fails, and so on. An empty list is
+// automatic (cheapest available). Unless limited to the list, other models the key offers come after it.
 const GeminiModelPicker: FC = () => {
   const [models, setModels] = useState<GeminiModelOption[] | null>(null)
-  const [current, setCurrent] = useState('')
+  const [order, setOrder] = useState<string[]>([])
+  const [saved, setSaved] = useState<{ order: string[]; strict: boolean }>({ order: [], strict: false })
   const [strict, setStrict] = useState(false)
   const [inUse, setInUse] = useState<string | null>(null)
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null)
@@ -214,25 +214,45 @@ const GeminiModelPicker: FC = () => {
     getGeminiModels()
       .then(r => {
         setModels(r.models)
-        setCurrent(r.current)
+        setOrder(r.order)
         setStrict(r.strict)
+        setSaved({ order: r.order, strict: r.strict })
         setInUse(r.inUse)
         if (r.error) setNote({ text: r.error, ok: false })
       })
       .catch(err => setNote({ text: err.message, ok: false }))
   }, [])
 
-  const save = async (model: string, onlyThis: boolean) => {
+  const offered = models ?? []
+  const unused = offered.filter(m => !order.includes(m.id))
+  const dirty = JSON.stringify(order) !== JSON.stringify(saved.order) || (order.length > 0 && strict !== saved.strict)
+  const labelFor = (id: string) => {
+    const m = offered.find(o => o.id === id)
+    return m ? `${m.id}${m.cheap ? ' (cheapest)' : ''}` : `${id} (not offered by this key)`
+  }
+
+  const setAt = (i: number, id: string) => setOrder(o => o.map((m, n) => (n === i ? id : m)))
+  const move = (i: number, by: -1 | 1) => setOrder(o => {
+    const next = [...o]
+    const j = i + by
+    if (j < 0 || j >= next.length) return o
+    ;[next[i], next[j]] = [next[j], next[i]]
+    return next
+  })
+  const remove = (i: number) => setOrder(o => o.filter((_, n) => n !== i))
+  const add = () => { if (unused[0]) setOrder(o => [...o, unused[0].id]) }
+
+  const save = async () => {
     setSaving(true)
     setNote(null)
     try {
-      const r = await setGeminiModel(model, onlyThis)
-      setCurrent(r.current)
+      const r = await setGeminiModel(order, strict)
+      setOrder(r.order)
       setStrict(r.strict)
+      setSaved({ order: r.order, strict: r.strict })
       setNote({
-        text: !r.current ? 'Saved. Gapwise will pick the cheapest available model.'
-          : r.strict ? `Saved. Gapwise will use only ${r.current}.`
-          : `Saved. Gapwise will use ${r.current} first and switch to another model when it is busy.`,
+        text: !r.order.length ? 'Saved. Gapwise picks the cheapest available model automatically.'
+          : `Saved. Order: ${r.order.join(' → ')}${r.strict ? ' (only these).' : ', then other available models.'}`,
         ok: true,
       })
     } catch (err: any) {
@@ -242,44 +262,60 @@ const GeminiModelPicker: FC = () => {
     }
   }
 
-  // Keep a saved choice selectable even if the key no longer lists it.
-  const options = models && current && !models.some(m => m.id === current)
-    ? [{ id: current, label: 'not offered by this key', cheap: false }, ...models]
-    : models ?? []
-
   return (
     <div className="model-picker">
-      <label className="settings-card-label" htmlFor="gemini-model">Model</label>
-      <div className="settings-card-row">
-        <select
-          id="gemini-model"
-          className="input settings-input"
-          value={current}
-          disabled={!models || saving}
-          onChange={e => save(e.target.value, e.target.value ? strict : false)}
-        >
-          <option value="">Automatic: cheapest available (recommended)</option>
-          {options.map(m => (
-            <option key={m.id} value={m.id}>
-              {m.id}{m.cheap ? ' (cheapest)' : ''}{m.label && m.label !== m.id ? ` — ${m.label}` : ''}
-            </option>
-          ))}
-        </select>
+      <div className="settings-card-head">
+        <span className="settings-card-label">Model order</span>
+        <span className="settings-badge">{order.length ? `${order.length} model${order.length === 1 ? '' : 's'}` : 'Automatic'}</span>
       </div>
-      {current && (
+      <div className="settings-card-help">
+        Gapwise tries model 1 first. If it fails or is out of quota, it moves to model 2, then model 3, and so on.
+        Leave the list empty to pick the cheapest available model automatically.
+      </div>
+
+      {order.length > 0 && (
+        <ol className="model-chain">
+          {order.map((id, i) => (
+            <li key={`${i}-${id}`}>
+              <span className="model-chain-num">{i + 1}</span>
+              <select className="input" value={id} disabled={saving} onChange={e => setAt(i, e.target.value)} aria-label={`Model ${i + 1}`}>
+                <option value={id}>{labelFor(id)}</option>
+                {unused.map(m => <option key={m.id} value={m.id}>{labelFor(m.id)}</option>)}
+              </select>
+              <span className="model-chain-actions">
+                <button type="button" className="assist-icon-btn" onClick={() => move(i, -1)} disabled={i === 0 || saving} aria-label="Move up">↑</button>
+                <button type="button" className="assist-icon-btn" onClick={() => move(i, 1)} disabled={i === order.length - 1 || saving} aria-label="Move down">↓</button>
+                <button type="button" className="assist-icon-btn" onClick={() => remove(i)} disabled={saving} aria-label="Remove">✕</button>
+              </span>
+              {i < order.length - 1 && <span className="model-chain-then" aria-hidden>if it fails ↓</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <div className="settings-card-row">
+        <button type="button" className="btn-secondary" onClick={add} disabled={!models || !unused.length || saving || order.length >= 10}>
+          {order.length ? '+ Add fallback model' : '+ Choose model 1'}
+        </button>
+        {order.length > 0 && (
+          <button type="button" className="btn-secondary" onClick={() => setOrder([])} disabled={saving}>Use automatic</button>
+        )}
+        <button type="button" className="btn-primary" onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save order'}</button>
+      </div>
+
+      {order.length > 0 && (
         <label className="model-fallback">
-          <input type="checkbox" checked={!strict} disabled={saving} onChange={e => save(current, !e.target.checked)} />
-          <span>If {current} is busy or out of quota, use another model so gap analysis and the assistant keep working</span>
+          <input type="checkbox" checked={!strict} disabled={saving} onChange={e => setStrict(!e.target.checked)} />
+          <span>If every model in this list fails, try the other models this key offers</span>
         </label>
       )}
-      <div className="settings-card-help">
-        {models ? `${models.length} models available to this key. ` : 'Loading the models this key can use… '}
-        Lite models cost the least and have the highest free limits.
-        {inUse && <> Last answer came from <strong>{inUse}</strong>{current && inUse !== current ? ' (a fallback)' : ''}.</>}
-      </div>
-      {current && strict && (
-        <div className="settings-message bad">Fallback is off: if {current} hits its limit, gap analysis and the assistant will stop until it recovers.</div>
+      {order.length > 0 && strict && (
+        <div className="settings-message bad">Only these models will be used. If all of them hit their limits, gap analysis and the assistant stop until one recovers.</div>
       )}
+      <div className="settings-card-help">
+        {models ? `${models.length} models available to this key; Lite models cost the least and have the highest free limits.` : 'Loading the models this key can use…'}
+        {inUse && <> Last answer came from <strong>{inUse}</strong>{order.length && inUse !== order[0] ? ' (a fallback)' : ''}.</>}
+      </div>
       {note && <div className={`settings-message ${note.ok ? 'ok' : 'bad'}`}>{note.text}</div>}
     </div>
   )
