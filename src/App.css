@@ -3176,3 +3176,13 @@ a.browser-open-btn, a.visit-btn { display: inline-flex; align-items: center; tex
 .theme-toggle-compact .sidebar-icon { width: 16px; height: 16px; }
 body, .sidebar, .page-content, .dash-panel, .input, .btn-secondary { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
 input, textarea, select { color: inherit; }
+
+/* ─── New version available ─── */
+.update-banner {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 1000;
+  display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 16px; max-width: calc(100vw - 32px);
+  border-radius: 12px; background: var(--c-surface); border: 1px solid var(--c-e7e7e3); color: var(--c-17191e);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); font-size: 13.5px; animation: updateIn 0.25s ease;
+}
+.update-banner .btn-primary { flex: none; }
+@keyframes updateIn { from { opacity: 0; } }

@@ -16,6 +16,7 @@ import DashboardPage from './pages/DashboardPage'
 import SupportPage from './pages/SupportPage'
 import AssistantWidget from './components/AssistantWidget'
 import GapRunnerChip from './components/GapRunnerChip'
+import UpdateBanner from './components/UpdateBanner'
 import { DialogHost } from './components/Dialog'
 import LeadPicker from './components/LeadPicker'
 import Tour, { type TourStep } from './components/Tour'
@@ -56,6 +57,7 @@ function App() {
         {/* Visitors get the public assistant; its links into the app (#/...) open sign-in. */}
         <AssistantWidget publicSite page="landing" onRoute={hash => { window.location.hash = hash }} />
         <DialogHost />
+        <UpdateBanner />
       </>
     )
   }
@@ -63,6 +65,7 @@ function App() {
   return (
     <LoginGate>
       <DialogHost />
+      <UpdateBanner />
       <Workspace
         onLanding={() => {
           window.history.pushState(null, '', window.location.pathname + window.location.search)
