@@ -107,7 +107,7 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
         <div className="sidebar-access">
           <span className={`settings-badge ${user.permissions.claude ? 'ok' : ''}`}>Claude {user.permissions.claude ? 'on' : 'off'}</span>
           <span className={`settings-badge ${user.permissions.graph8 ? 'ok' : ''}`}>Graph8 {user.permissions.graph8 ? 'on' : 'off'}</span>
-          <span className={`settings-badge ${user.permissions.gemini ? 'ok' : ''}`}>Gemini {user.permissions.gemini ? 'on' : 'off'}</span>
+          <span className={`settings-badge ${user.permissions.gemini ? 'ok' : ''}`}>Gap analysis {user.permissions.gemini ? 'on' : 'off'}</span>
         </div>
       </div>
     </aside>

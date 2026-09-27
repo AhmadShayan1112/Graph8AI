@@ -28,7 +28,7 @@ interface Progress { leadId: string; phase: Phase; phaseAt: number; startedAt: n
 
 const STEPS: Array<{ key: GapStage; label: string }> = [
   { key: 'graph8', label: 'Reading the Graph8 company record' },
-  { key: 'research', label: 'Gemini researching the business on the web' },
+  { key: 'research', label: 'Researching the business on the web' },
   { key: 'saving', label: 'Writing the gaps and prospect profile' },
 ]
 
@@ -133,7 +133,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   const analyseAll = async () => {
     const todo = leads.filter(l => !results[l.id])
     if (!todo.length) return
-    if (!confirm(`Run gap analysis on ${todo.length} lead${todo.length > 1 ? 's' : ''}? Each one is a Gemini web search and takes up to a minute.`)) return
+    if (!confirm(`Run gap analysis on ${todo.length} lead${todo.length > 1 ? 's' : ''}? Each one is a web research run and takes up to a minute.`)) return
     stopRef.current = false
     setBatch({ done: 0, total: todo.length })
     for (let i = 0; i < todo.length; i++) {
@@ -186,7 +186,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
           <div className="page-step">Gap analysis</div>
           <h1 className="page-title">{campaign?.name ?? 'Gap analysis'}</h1>
           <div className="page-subtitle">
-            Gemini researches each lead on the web, on top of Graph8's data, to find its real gaps, what it needs and how to pitch it.
+            Gapwise researches each lead on the web, on top of Graph8's data, to find its real gaps, what it needs and how to pitch it.
           </div>
         </div>
         {!!campaigns?.length && (
@@ -211,7 +211,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
       </header>
 
       {!canRun && (
-        <div className="settings-alert">Gap analysis with Gemini is turned off for your account. You can read saved analyses; ask the admin to enable Gemini to run new ones.</div>
+        <div className="settings-alert">Gap analysis is turned off for your account. You can read saved analyses; ask the admin to turn it on to run new ones.</div>
       )}
       {error && <div className="settings-alert">{error}</div>}
 
@@ -481,7 +481,12 @@ const GapDetail: FC<{ gap: GapAnalysis; onBuild: (offer: string) => void }> = ({
           <div className="an-section-title gap-h">Sources</div>
           <ol className="gap-sources">
             {gap.sources.map(s => (
-              <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title || s.url}</a></li>
+              <li key={s.url}>
+                {/* Older results kept the research provider's redirect links; show those as plain text. */}
+                {/vertexaisearch\.cloud\.google\.com/.test(s.url)
+                  ? <span>{s.title || 'Web source'}</span>
+                  : <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title || s.url}</a>}
+              </li>
             ))}
           </ol>
         </section>
@@ -489,7 +494,7 @@ const GapDetail: FC<{ gap: GapAnalysis; onBuild: (offer: string) => void }> = ({
 
       <div className="an-foot text-muted">
         Researched {new Date(gap.createdAt).toLocaleString()} by {gap.username}
-        {gap.usedGraph8 ? ' · Graph8 company data + Gemini web search' : ' · Gemini web search'}
+        {gap.usedGraph8 ? ' · Graph8 company data and web research' : ' · web research'}
         {gap.queries.length > 0 && <> · searched “{gap.queries.slice(0, 3).join('”, “')}”</>}
       </div>
     </div>

@@ -7,7 +7,7 @@ import {
 const KEYS: Array<{ id: Permission; label: string; help: string }> = [
   { id: 'claude', label: 'Claude', help: 'Build MVP sites' },
   { id: 'graph8', label: 'Graph8', help: 'Search & enrich leads' },
-  { id: 'gemini', label: 'Gemini', help: 'Gap analysis with web search' },
+  { id: 'gemini', label: 'Gap analysis', help: 'Web research on each lead (uses the Gemini key)' },
 ]
 
 export const Toggle: FC<{ on: boolean; label: string; disabled?: boolean; onChange: (on: boolean) => void }> = ({ on, label, disabled, onChange }) => (
@@ -39,7 +39,7 @@ const UsersPage: FC = () => {
 
   const setForEveryone = async (key: keyof WorkspaceAccess, on: boolean) => {
     const what = key === 'graph8ForEveryone' ? 'Graph8 access? Everyone, including new sign-ups, will be able to search and enrich leads'
-      : 'Gemini access? Everyone, including new sign-ups, will be able to run gap analysis'
+      : 'gap analysis? Everyone, including new sign-ups, will be able to run it'
     if (on && !confirm(`Give every user ${what} with the workspace key.`)) return
     setAccessBusy(true)
     setError('')
@@ -53,10 +53,10 @@ const UsersPage: FC = () => {
   }
 
   const everyone: Partial<Permissions> = { graph8: !!access?.graph8ForEveryone, gemini: !!access?.geminiForEveryone }
-  const openToAll = [access?.graph8ForEveryone && 'Graph8', access?.geminiForEveryone && 'Gemini'].filter(Boolean)
+  const openToAll = [access?.graph8ForEveryone && 'Graph8', access?.geminiForEveryone && 'Gap analysis'].filter(Boolean)
   const EVERYONE_SWITCHES: Array<{ key: keyof WorkspaceAccess; label: string; help: string }> = [
     { key: 'graph8ForEveryone', label: 'Graph8 for everyone', help: 'Every user, including new sign-ups, can search, enrich and analyse leads.' },
-    { key: 'geminiForEveryone', label: 'Gemini for everyone', help: 'Every user, including new sign-ups, can run gap analysis with web search.' },
+    { key: 'geminiForEveryone', label: 'Gap analysis for everyone', help: 'Every user, including new sign-ups, can run gap analysis (uses the Gemini key).' },
   ]
 
   const replace = (u: AppUser) => setUsers(list => list?.map(x => (x.id === u.id ? u : x)) ?? null)

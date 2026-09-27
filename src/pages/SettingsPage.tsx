@@ -17,7 +17,7 @@ const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder
   {
     kind: 'gemini',
     label: 'Gemini API key',
-    help: 'Used for gap analysis: Gemini searches the web about each lead. Create one in Google AI Studio.',
+    help: 'Powers gap analysis (web research on each lead). Create one in Google AI Studio. Users only ever see “gap analysis”, never the provider.',
     placeholder: 'AIza…',
   },
 ]

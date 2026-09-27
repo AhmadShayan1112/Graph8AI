@@ -173,7 +173,7 @@ const DashboardPage: FC<Props> = ({ onNavigate, onLanding, onOpenCampaign, onOpe
                   Your access:
                   {(['graph8', 'gemini', 'claude'] as const).map(k => (
                     <span key={k} className={`settings-badge ${user.permissions[k] ? 'ok' : ''}`}>
-                      {k === 'graph8' ? 'Graph8' : k === 'gemini' ? 'Gemini' : 'Claude'} {user.permissions[k] ? 'on' : 'off'}
+                      {k === 'graph8' ? 'Graph8' : k === 'gemini' ? 'Gap analysis' : 'Claude'} {user.permissions[k] ? 'on' : 'off'}
                     </span>
                   ))}
                 </div>

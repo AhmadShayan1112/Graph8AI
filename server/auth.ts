@@ -167,7 +167,7 @@ export function requireAdmin(_req: Request, res: Response, next: NextFunction) {
 const PERMISSION_LABEL: Record<Permission, string> = {
   claude: 'MVP generation with Claude',
   graph8: 'Lead search with Graph8',
-  gemini: 'Gap analysis with Gemini',
+  gemini: 'Gap analysis',
 }
 
 export function requirePermission(p: Permission) {
