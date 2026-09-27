@@ -12,6 +12,8 @@ interface Props {
   campaign: Campaign | null
   onOpenCampaign: (id: string) => void
   onLeaveCampaign: () => void
+  // A search made outside a campaign was filed under this one; Discover continues inside it.
+  onCampaignAssigned: (c: Campaign) => void
 }
 
 const GAP_FILTERS: Array<[string, string]> = [
@@ -41,7 +43,8 @@ function activeCount(f: DiscoverFilters) {
     + (f.foundedFrom || f.foundedTo ? 1 : 0) + (f.website !== 'any' ? 1 : 0) + (f.hasPhone ? 1 : 0)
 }
 
-const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOpenCampaign, onLeaveCampaign }) => {
+const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOpenCampaign, onLeaveCampaign, onCampaignAssigned }) => {
+  const [assignedNote, setAssignedNote] = useState('')
   const canSearch = useSession().user.permissions.graph8
   const [filters, setFiltersState] = useState<DiscoverFilters>(lastFilters)
   const [prompt, setPrompt] = useState('')
@@ -60,6 +63,14 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOp
     try {
       const result = await discoverLeads({ ...f, prompt: promptText || undefined }, save, campaign?.id)
       setLeads(result.leads)
+      if (result.campaign && !campaign) {
+        onCampaignAssigned(result.campaign)
+        setAssignedNote(result.createdCampaign
+          ? 'New campaign created for this search. Its leads are saved here.'
+          : 'Added to your existing campaign for this search.')
+      } else if (campaign) {
+        setAssignedNote('')
+      }
       setTotal(lastTotal = result.total)
       // Turn the prompt into real filter chips so the user can refine it.
       if (promptText && result.matchedOn) {
@@ -129,7 +140,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOp
             <div className="campaign-banner-text">
               <span className="campaign-banner-label mono">Campaign</span>
               <strong>{campaign.name}</strong>
-              <span className="text-muted">Searches and every lead they find are saved here.</span>
+              <span className="text-muted">{assignedNote || 'Searches and every lead they find are saved here.'}</span>
             </div>
             <div className="campaign-banner-actions">
               <button className="btn-secondary" onClick={() => onOpenCampaign(campaign.id)}>View campaign</button>

@@ -31,7 +31,9 @@ fit score, a getting-started checklist, recent campaigns and recent activity. Th
 workspace; users see their own work.
 
 ## Campaigns  [#/campaigns]
-A campaign groups the searches you run for one goal and keeps every lead they find.
+A campaign groups the searches you run for one goal and keeps every lead they find. Every search belongs to a
+campaign: a search made in Discover outside a campaign is saved to your campaign with the same target, or a new
+campaign is created for it automatically (named after the search), and Discover switches into it.
 - "+ New campaign": name, goal (optional), target industries and target locations (comma-separated).
 - Open a campaign to see its saved leads (filter, open in Audit, remove) and past searches (reopen results
   without searching again), plus stats. Buttons: "Search in this campaign", Analysis, Edit, Delete.

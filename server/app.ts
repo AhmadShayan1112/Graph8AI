@@ -25,7 +25,7 @@ import {
 } from './users.js'
 import { countSearches, deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } from './history.js'
 import {
-  campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
+  campaignForSearch, campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
   getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
@@ -394,6 +394,21 @@ app.post('/api/leads/discover', async (req, res) => {
       return transformToLead(contact, company, analyzeWebsite(company.domain || `${company.name}|${company.city}`, !company.domain))
     })
 
+    // Every search the person runs belongs to a campaign: outside one, file it under a matching campaign,
+    // creating it if needed. (The app's own first-load search, save=false, is not stored.)
+    let assigned: Awaited<ReturnType<typeof campaignForSearch>>['campaign'] | null = null
+    let createdCampaign = false
+    if (save && !campaignId) {
+      const target = {
+        industries: (body.industries ?? []).map(s => s.trim()).filter(Boolean).slice(0, 20),
+        locations: (body.locations ?? []).filter(l => l.value?.trim()).slice(0, 20)
+          .map(l => ({ value: l.value.trim(), ...(l.field ? { field: l.field } : {}) })),
+      }
+      const auto = await campaignForSearch(getAuth(res), target, asked.prompt?.trim() ?? '')
+        .catch(err => { console.error('[campaigns] auto campaign failed:', err.message); return null })
+      if (auto) { campaignId = auto.id; assigned = auto.campaign; createdCampaign = auto.created }
+    }
+
     // History is a convenience: a failed save must not lose the search the user just paid for.
     const searchId = save || campaignId
       ? await saveSearch(getAuth(res), {
@@ -412,6 +427,9 @@ app.post('/api/leads/discover', async (req, res) => {
     res.json({
       leads,
       searchId,
+      // The campaign this search was filed under automatically, if it was made outside one.
+      campaign: assigned,
+      createdCampaign,
       source: 'graph8',
       total: companyRes.pagination.total,
       hasMore: companyRes.pagination.has_next,

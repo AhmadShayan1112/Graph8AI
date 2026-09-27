@@ -16,6 +16,9 @@ interface CampaignDoc {
   name: string
   description: string
   target: CampaignTarget
+  // Set on campaigns created automatically for a search made outside any campaign: the normalised target,
+  // so the same search again lands in the same campaign.
+  autoKey?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -40,6 +43,7 @@ async function collections() {
   const leads = db.collection<CampaignLeadDoc>('campaign_leads')
   if (!indexReady) {
     await campaigns.createIndex({ ownerId: 1, updatedAt: -1 })
+    await campaigns.createIndex({ ownerId: 1, autoKey: 1 })
     await leads.createIndex({ campaignId: 1, leadId: 1 }, { unique: true })
     indexReady = true
   }
@@ -243,4 +247,62 @@ export async function getCampaignLead(auth: AuthInfo, campaignId: string, leadId
   const { leads } = await collections()
   const doc = await leads.findOne({ campaignId: c._id, leadId })
   return doc ? { campaignId: c._id, lead: doc.lead as Record<string, any> } : null
+}
+
+const OTHER_KEY = '__other__'
+
+function autoKeyFor(target: CampaignTarget) {
+  const norm = (xs: string[]) => [...new Set(xs.map(x => x.trim().toLowerCase()).filter(Boolean))].sort()
+  const industries = norm(target.industries)
+  const locations = norm(target.locations.map(l => l.value))
+  return industries.length || locations.length ? JSON.stringify({ i: industries, l: locations }) : OTHER_KEY
+}
+
+const titleCase = (s: string) => s.replace(/\s+/g, ' ').trim().replace(/(^|\s)\S/g, c => c.toUpperCase())
+
+// Every Discover search belongs to a campaign. For a search made outside one, reuse this person's campaign
+// with the same target, or create it (named after the search). At the campaign limit, searches go to a
+// single "Other searches" campaign instead of being lost.
+export async function campaignForSearch(auth: AuthInfo, target: CampaignTarget, prompt: string) {
+  const { campaigns } = await collections()
+  const ownerId = ownerOf(auth)
+  let key = autoKeyFor(target)
+
+  const reuse = async (k: string) => {
+    const found = await campaigns.findOneAndUpdate(
+      { ownerId, autoKey: k }, { $set: { updatedAt: new Date() } }, { returnDocument: 'after' })
+    return found ? { campaign: toPublic(found, auth), id: found._id, created: false } : null
+  }
+
+  const existing = await reuse(key)
+  if (existing) return existing
+
+  const atLimit = (await campaigns.countDocuments({ ownerId })) >= MAX_CAMPAIGNS_PER_OWNER
+  if (atLimit && key !== OTHER_KEY) {
+    key = OTHER_KEY
+    const other = await reuse(key)
+    if (other) return other
+  }
+
+  const where = target.locations.map(l => l.value).join(', ')
+  const what = target.industries.join(', ')
+  const name = key === OTHER_KEY
+    ? 'Other searches'
+    : titleCase(prompt) || (what && where ? `${what} in ${where}` : what || `Businesses in ${where}`)
+  const now = new Date()
+  const doc: CampaignDoc = {
+    _id: new ObjectId(),
+    ownerId,
+    username: auth.username,
+    name: name.slice(0, 80),
+    description: key === OTHER_KEY
+      ? 'Searches made outside a campaign after the campaign limit was reached.'
+      : 'Created automatically from a Discover search.',
+    target: key === OTHER_KEY ? { industries: [], locations: [] } : target,
+    autoKey: key,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await campaigns.insertOne(doc)
+  return { campaign: toPublic(doc, auth), id: doc._id, created: true }
 }

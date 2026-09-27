@@ -38,6 +38,11 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 
 ## Campaigns
 
+- **Every search belongs to a campaign.** A Discover search made outside a campaign is filed under the person's
+  campaign with the same target (industries + locations), or a new campaign is created for it automatically, named
+  after the search; Discover then continues inside that campaign. At the 100-campaign limit such searches go to
+  one "Other searches" campaign. The app's own first-load search is not stored.
+
 - A **campaign** has a name, a goal, and an optional target (industries and locations).
 - **Search in this campaign** opens Discover with the target filled in. Every search run there is saved under
   the campaign, and every lead it finds is saved to the campaign's lead list (`campaign_leads` collection, one

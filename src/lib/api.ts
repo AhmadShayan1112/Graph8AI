@@ -57,6 +57,9 @@ export const EMPTY_FILTERS: DiscoverFilters = {
 export interface DiscoverResult {
   leads: Lead[]
   searchId: string | null
+  // Set when a search made outside a campaign was filed under one automatically.
+  campaign: Campaign | null
+  createdCampaign: boolean
   total: number
   hasMore: boolean
   matchedOn: { industry: string; locations: DiscoverFilters['locations'] } | null

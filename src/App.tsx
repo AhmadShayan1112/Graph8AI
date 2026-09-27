@@ -309,6 +309,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
             campaign={activeCampaign}
             onOpenCampaign={openCampaign}
             onLeaveCampaign={() => setActiveCampaign(null)}
+            onCampaignAssigned={setActiveCampaign}
           />
         )}
         {page === 'audit' && selectedLead && (
