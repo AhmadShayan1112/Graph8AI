@@ -59,9 +59,8 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
         const res = await login(username.trim(), password)
         setSession(s => (s ? { ...s, authenticated: true, user: res.user } : s))
       } else {
-        await signUp(username.trim(), password)
-        setMode('signin')
-        setNotice('Account created. The admin needs to approve it before you can sign in.')
+        const res = await signUp(username.trim(), password)
+        setSession(s => (s ? { ...s, authenticated: true, user: res.user } : s))
       }
     } catch (err: any) {
       setError(err.message)
@@ -142,7 +141,7 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
                 <h2 className="auth-title">{signup ? 'Create your account' : 'Welcome back'}</h2>
                 <p className="auth-sub">
                   {signup
-                    ? 'The admin approves new accounts and chooses which tools you can use.'
+                    ? 'Get started in seconds. The admin chooses which tools your account can use.'
                     : 'Sign in to continue to your workspace.'}
                 </p>
               </div>

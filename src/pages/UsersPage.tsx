@@ -36,8 +36,7 @@ const UsersPage: FC = () => {
   const replace = (u: AppUser) => setUsers(list => list?.map(x => (x.id === u.id ? u : x)) ?? null)
   const remove = (id: string) => setUsers(list => list?.filter(x => x.id !== id) ?? null)
 
-  const pending = users?.filter(u => u.pending) ?? []
-  const active = users?.filter(u => !u.pending) ?? []
+  const active = users ?? []
   const missing = keys ? KEYS.filter(k => !keys[k.id].configured) : []
 
   return (
@@ -62,19 +61,6 @@ const UsersPage: FC = () => {
           </div>
         )}
 
-        {pending.length > 0 && (
-          <section className="settings-card">
-            <div className="settings-card-head">
-              <span className="settings-card-label">Waiting for approval</span>
-              <span className="settings-badge">{pending.length}</span>
-            </div>
-            <div className="settings-card-help">These people signed up themselves. Approve them, then switch on the keys they need.</div>
-            <div className="user-list">
-              {pending.map(u => <PendingRow key={u.id} user={u} onChange={replace} onRemove={remove} />)}
-            </div>
-          </section>
-        )}
-
         <AddUser onCreated={u => setUsers(list => [...(list ?? []), u].sort((a, b) => a.username.localeCompare(b.username)))} />
 
         <section className="settings-card">
@@ -93,7 +79,7 @@ const UsersPage: FC = () => {
               </div>
               <span className="settings-badge ok">Admin</span>
             </div>
-            {users && !active.length && <div className="settings-card-help user-empty">No users yet. Add one above or approve a sign-up.</div>}
+            {users && !active.length && <div className="settings-card-help user-empty">No users yet. Add one above, or people can sign up themselves.</div>}
             {active.map(u => <UserRow key={u.id} user={u} onChange={replace} onRemove={remove} />)}
           </div>
         </section>
@@ -199,27 +185,6 @@ function useRowActions({ user, onChange, onRemove }: RowProps) {
 
 const Avatar: FC<{ name: string }> = ({ name }) => <div className="user-avatar">{name[0]?.toUpperCase()}</div>
 
-const PendingRow: FC<RowProps> = props => {
-  const { user } = props
-  const { busy, message, patch, del } = useRowActions(props)
-  return (
-    <div className="user-row">
-      <div className="user-ident">
-        <Avatar name={user.username} />
-        <div>
-          <div className="user-name">{user.username}</div>
-          <div className="user-meta">Signed up {new Date(user.createdAt).toLocaleDateString()}</div>
-        </div>
-      </div>
-      <div className="user-actions">
-        <button className="btn-primary" disabled={busy} onClick={() => patch({ approve: true }, 'Approved.')}>Approve</button>
-        <button className="btn-secondary btn-danger" disabled={busy} onClick={() => del('Reject and delete')}>Reject</button>
-      </div>
-      {message && <div className={`settings-message user-row-message ${message.ok ? 'ok' : 'bad'}`}>{message.text}</div>}
-    </div>
-  )
-}
-
 const UserRow: FC<RowProps> = props => {
   const { user } = props
   const { busy, message, patch, del } = useRowActions(props)
@@ -237,7 +202,7 @@ const UserRow: FC<RowProps> = props => {
           <div className="user-name">
             {user.username} {user.disabled && <span className="settings-badge">Disabled</span>}
           </div>
-          <div className="user-meta">Added {new Date(user.createdAt).toLocaleDateString()}</div>
+          <div className="user-meta">{user.selfSignup ? 'Signed up' : 'Added'} {new Date(user.createdAt).toLocaleDateString()}</div>
         </div>
       </div>
       <div className="user-perms">

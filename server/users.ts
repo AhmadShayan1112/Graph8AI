@@ -15,8 +15,8 @@ interface UserDoc {
   passwordHash: string
   permissions: Permissions
   disabled: boolean
-  // Self sign-ups wait here, with every key off, until the admin approves them.
-  pending?: boolean
+  // True for accounts people created themselves; they start with every key off.
+  selfSignup?: boolean
   // Bumped on password reset so existing sessions for this user stop working.
   sessionVersion: number
   createdAt: Date
@@ -28,13 +28,13 @@ export interface PublicUser {
   username: string
   permissions: Permissions
   disabled: boolean
-  pending: boolean
+  selfSignup: boolean
   createdAt: Date
   updatedAt: Date
 }
 
-// A public sign-up form must not let anyone fill the database, so cap unapproved accounts.
-const MAX_PENDING = 50
+// A public sign-up form must not let anyone fill the database, so cap how fast accounts can be created.
+const MAX_SIGNUPS_PER_HOUR = 30
 
 let indexReady = false
 async function users() {
@@ -90,7 +90,7 @@ const toPublic = (u: UserDoc): PublicUser => ({
   username: u.username,
   permissions: { claude: !!u.permissions?.claude, graph8: !!u.permissions?.graph8 },
   disabled: !!u.disabled,
-  pending: !!u.pending,
+  selfSignup: !!u.selfSignup,
   createdAt: u.createdAt,
   updatedAt: u.updatedAt,
 })
@@ -100,15 +100,15 @@ export async function listUsers() {
   return list.map(toPublic)
 }
 
-export async function createUser(username: string, password: string, permissions: Permissions, pending = false) {
+export async function createUser(username: string, password: string, permissions: Permissions, selfSignup = false) {
   const now = new Date()
   const doc: UserDoc = {
     _id: new ObjectId(),
     username,
     passwordHash: await hashPassword(password),
-    permissions: pending ? { claude: false, graph8: false } : permissions,
+    permissions: selfSignup ? { claude: false, graph8: false } : permissions,
     disabled: false,
-    pending,
+    selfSignup,
     sessionVersion: 1,
     createdAt: now,
     updatedAt: now,
@@ -117,14 +117,17 @@ export async function createUser(username: string, password: string, permissions
   return toPublic(doc)
 }
 
+// Self sign-ups are active straight away, but can't use Claude or Graph8 until the admin switches them on.
 export async function signUp(username: string, password: string) {
-  if ((await (await users()).countDocuments({ pending: true })) >= MAX_PENDING) return null
-  return createUser(username, password, { claude: false, graph8: false }, true)
+  const recent = await (await users()).countDocuments({ selfSignup: true, createdAt: { $gt: new Date(Date.now() - 3600_000) } })
+  if (recent >= MAX_SIGNUPS_PER_HOUR) return null
+  const user = await createUser(username, password, { claude: false, graph8: false }, true)
+  return { user, sessionVersion: 1 }
 }
 
 export async function updateUser(
   id: string,
-  patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string; approve?: boolean },
+  patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string },
 ) {
   if (!ObjectId.isValid(id)) return null
   const $set: Record<string, unknown> = { updatedAt: new Date() }
@@ -134,7 +137,6 @@ export async function updateUser(
     if (typeof on === 'boolean') $set[`permissions.${p}`] = on
   }
   if (typeof patch.disabled === 'boolean') $set.disabled = patch.disabled
-  if (patch.approve === true) $set.pending = false
   if (patch.password) {
     $set.passwordHash = await hashPassword(patch.password)
     $inc.sessionVersion = 1
@@ -161,7 +163,6 @@ export async function authenticateUser(username: string, password: string) {
   }
   if (!(await verifyPassword(password, user.passwordHash))) return null
   // Only reveal account state to someone who knows the password.
-  if (user.pending) return { status: 'pending' as const }
   if (user.disabled) return { status: 'disabled' as const }
   return { status: 'ok' as const, id: String(user._id), sessionVersion: user.sessionVersion }
 }
@@ -170,6 +171,6 @@ export async function authenticateUser(username: string, password: string) {
 export async function getSessionUser(id: string, sessionVersion: number) {
   if (!ObjectId.isValid(id)) return null
   const user = await (await users()).findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } })
-  if (!user || user.disabled || user.pending || user.sessionVersion !== sessionVersion) return null
+  if (!user || user.disabled || user.sessionVersion !== sessionVersion) return null
   return toPublic(user)
 }

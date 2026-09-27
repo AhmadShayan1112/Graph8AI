@@ -116,13 +116,13 @@ app.post('/api/users', async (req, res) => {
 })
 
 app.patch('/api/users/:id', async (req, res) => {
-  const { permissions, disabled, password, approve } = req.body ?? {}
+  const { permissions, disabled, password } = req.body ?? {}
   if (password !== undefined) {
     const invalid = validatePassword(password)
     if (invalid) { res.status(400).json({ error: invalid }); return }
   }
   try {
-    const user = await updateUser(req.params.id, { permissions, disabled, password, approve })
+    const user = await updateUser(req.params.id, { permissions, disabled, password })
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
     res.json({ user })
   } catch (err: any) {

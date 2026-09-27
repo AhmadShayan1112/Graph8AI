@@ -24,8 +24,8 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 
 - The **admin** signs in with username `admin` and `ADMIN_PASSWORD`, manages keys in **Settings**, and
   manages people in **Users**.
-- **Users** are added by the admin, or sign up themselves. A sign-up stays *pending*, with every key off,
-  until the admin approves it (at most 50 pending accounts at a time).
+- **Users** are added by the admin, or sign up themselves and are signed in straight away. A self sign-up
+  starts with every key off until the admin switches them on (at most 30 sign-ups per hour).
 - For each user the admin switches **Claude** (MVP generation) and **Graph8** (lead search and enrichment)
   on or off. Users share the workspace keys but never see them. Access is checked on the server for every
   request, so a change, disable or delete takes effect immediately. A password reset signs that user out.

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { safeEqual, sign } from './crypto.js'
 import {
-  authenticateUser, getSessionUser, normalizeUsername, signUp as createPendingUser, validatePassword, validateUsername,
+  authenticateUser, getSessionUser, normalizeUsername, signUp as createAccount, validatePassword, validateUsername,
   type Permission, type Permissions,
 } from './users.js'
 
@@ -90,7 +90,6 @@ export async function login(req: Request, res: Response) {
   try {
     const user = await authenticateUser(username, given)
     if (!user) { res.status(401).json({ error: 'Wrong username or password' }); return }
-    if (user.status === 'pending') { res.status(403).json({ error: 'Your account is waiting for admin approval.' }); return }
     if (user.status === 'disabled') { res.status(403).json({ error: 'Your account has been disabled by the admin.' }); return }
     startSession(res, `u-${user.id}-${user.sessionVersion}`)
     const auth = await userAuth(user.id, user.sessionVersion)
@@ -101,7 +100,7 @@ export async function login(req: Request, res: Response) {
   }
 }
 
-// Anyone can ask for an account; it stays pending with every key off until the admin approves it.
+// Anyone can create an account and is signed in right away, with every key off until the admin enables it.
 export async function signUp(req: Request, res: Response) {
   if (!process.env.ADMIN_PASSWORD) {
     res.status(503).json({ error: 'Sign-up is unavailable until the server is configured.' })
@@ -111,9 +110,11 @@ export async function signUp(req: Request, res: Response) {
   const invalid = validateUsername(username) ?? validatePassword(req.body?.password)
   if (invalid) { res.status(400).json({ error: invalid }); return }
   try {
-    const user = await createPendingUser(username, req.body.password)
-    if (!user) { res.status(429).json({ error: 'Too many accounts are waiting for approval. Try again later.' }); return }
-    res.json({ pending: true })
+    const created = await createAccount(username, req.body.password)
+    if (!created) { res.status(429).json({ error: 'Too many new accounts right now. Try again in a while.' }); return }
+    startSession(res, `u-${created.user.id}-${created.sessionVersion}`)
+    const auth = await userAuth(created.user.id, created.sessionVersion)
+    res.json({ authenticated: true, user: auth && publicAuth(auth) })
   } catch (err: any) {
     if (err.code === 11000) { res.status(409).json({ error: 'That username is taken.' }); return }
     console.error('[auth] sign-up failed:', err.message)

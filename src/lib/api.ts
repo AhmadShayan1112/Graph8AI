@@ -143,7 +143,7 @@ export const login = (username: string, password: string) =>
     method: 'POST', body: JSON.stringify({ username, password }),
   })
 export const signUp = (username: string, password: string) =>
-  apiFetch<{ pending: boolean }>('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password }) })
+  apiFetch<{ authenticated: boolean; user: SessionUser | null }>('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password }) })
 export const logout = () => apiFetch<{ authenticated: boolean }>('/auth/logout', { method: 'POST' })
 
 export type SecretKind = 'graph8' | 'claude'
@@ -174,7 +174,7 @@ export interface AppUser {
   username: string
   permissions: Permissions
   disabled: boolean
-  pending: boolean
+  selfSignup: boolean
   createdAt: string
   updatedAt: string
 }
@@ -182,6 +182,6 @@ export interface AppUser {
 export const listUsers = () => apiFetch<{ users: AppUser[] }>('/users')
 export const createUser = (username: string, password: string, permissions: Permissions) =>
   apiFetch<{ user: AppUser }>('/users', { method: 'POST', body: JSON.stringify({ username, password, permissions }) })
-export const updateUser = (id: string, patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string; approve?: boolean }) =>
+export const updateUser = (id: string, patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string }) =>
   apiFetch<{ user: AppUser }>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
 export const deleteUser = (id: string) => apiFetch<{ deleted: boolean }>(`/users/${id}`, { method: 'DELETE' })
