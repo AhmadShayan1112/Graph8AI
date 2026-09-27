@@ -12,6 +12,7 @@ interface Props {
   lead: Lead
   // The campaign the lead came from, so the draft can use its gap analysis.
   campaignId?: string
+  // Unset: open on whichever email is ready (the MVP email first).
   initialMode?: OutreachMode
   onBack: () => void
   onOpenBuild: () => void
@@ -20,8 +21,8 @@ interface Props {
 
 // Two kinds of email to the lead, each drafted by Gapwise, edited here and sent from the workspace:
 // one that links to its deployed MVP, and one that shares its security audit with the PDF report attached.
-const OutreachPage: FC<Props> = ({ lead, campaignId, initialMode = 'mvp', onBack, onOpenBuild, onOpenSecurity }) => {
-  const [mode, setMode] = useState<OutreachMode>(initialMode)
+const OutreachPage: FC<Props> = ({ lead, campaignId, initialMode, onBack, onOpenBuild, onOpenSecurity }) => {
+  const [mode, setMode] = useState<OutreachMode>(initialMode ?? 'mvp')
   const [loading, setLoading] = useState(true)
   const [siteUrl, setSiteUrl] = useState<string | null>(null)
   const [audit, setAudit] = useState<SecurityAudit | null>(null)
@@ -39,7 +40,7 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, initialMode = 'mvp', onBack
     setForm(d ? { to: d.to, subject: d.subject, body: d.body } : { to: '', subject: '', body: '' })
   }
 
-  const load = (m = mode) => Promise.all([
+  const load = (m?: OutreachMode) => Promise.all([
     getOutreach(String(lead.id)),
     getSecurity(String(lead.id)).catch(() => ({ audit: null })),
   ]).then(([r, s]) => {
@@ -47,12 +48,15 @@ const OutreachPage: FC<Props> = ({ lead, campaignId, initialMode = 'mvp', onBack
     setSending(r.sending)
     setEmails(r.emails)
     setAudit(s.audit)
-    pick(r.emails, m)
+    // First load without a chosen tab: the MVP email if its site is deployed, else the security report if there is one.
+    const next = m ?? (r.siteUrl || !s.audit?.report ? 'mvp' : 'security')
+    setMode(next)
+    pick(r.emails, next)
   })
 
   useEffect(() => {
     setLoading(true)
-    load().catch(err => setMessage({ text: err.message, ok: false })).finally(() => setLoading(false))
+    load(initialMode).catch(err => setMessage({ text: err.message, ok: false })).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id])
 

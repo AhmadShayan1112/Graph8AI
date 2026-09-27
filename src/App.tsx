@@ -96,8 +96,8 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
   const [mvpType, setMvpType] = useState(initial.saved.mvpType ?? '')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [siteUrl, setSiteUrl] = useState<string | undefined>(initial.saved.siteUrl)
-  // Which email Outreach opens on: the MVP link, or the security audit report.
-  const [outreachMode, setOutreachMode] = useState<OutreachMode>('mvp')
+  // Which email Outreach opens on: the MVP link, the security audit report, or (unset) whichever is ready.
+  const [outreachMode, setOutreachMode] = useState<OutreachMode | undefined>(undefined)
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(initial.saved.activeCampaign ?? null)
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(idFor('campaigns'))
@@ -216,6 +216,8 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
     refresh()
     // The Campaigns menu item always lands on the list.
     if (id === 'campaigns') setOpenCampaignId(null)
+    // Outreach from the menu opens on whichever email is ready for the lead.
+    if (id === 'outreach') setOutreachMode(undefined)
     setPage(id)
     setMobileMenuOpen(false)
   }
@@ -432,7 +434,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
         )}
         {page === 'outreach' && selectedLead && (
           <OutreachPage
-            key={`${selectedLead.id}-${outreachMode}`}
+            key={`${selectedLead.id}-${outreachMode ?? 'auto'}`}
             lead={selectedLead}
             campaignId={activeCampaign?.id}
             initialMode={outreachMode}

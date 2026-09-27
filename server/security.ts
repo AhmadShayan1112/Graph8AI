@@ -93,7 +93,8 @@ export function publicAudit(d: AuditDoc) {
       checks: scan ? checksFor(scan) : [],
     })),
     report: d.report,
-    hasPdf: !!d.pdf,
+    // Audits are read without the PDF bytes; the report and the PDF are always saved (and cleared) together.
+    hasPdf: !!d.report,
     updatedAt: d.updatedAt,
   }
 }
