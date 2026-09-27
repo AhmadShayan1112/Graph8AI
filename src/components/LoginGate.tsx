@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type FC, type FormEvent, type ReactNode } from 'react'
 import { getSession, login, signUp, UNAUTHORIZED_EVENT, type SessionInfo, type SessionUser } from '../lib/api'
+import AuditDemo from './AuditDemo'
 
 const FULL_ACCESS: SessionUser = { username: 'admin', role: 'admin', permissions: { claude: true, graph8: true, gemini: true } }
 
@@ -11,13 +12,6 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue>({ user: FULL_ACCESS, refresh: () => {} })
 export const useSession = () => useContext(SessionContext)
-
-const STEPS = [
-  { t: 'Discover', d: 'Find local businesses with website gaps.' },
-  { t: 'Audit', d: 'Score speed, SEO, security and conversion.' },
-  { t: 'Build', d: 'Claude builds a working MVP site in minutes.' },
-  { t: 'Reach out', d: 'Send the live link with a follow-up sequence.' },
-]
 
 const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -84,34 +78,23 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
   return (
     <div className="auth-split">
       <aside className="auth-showcase">
-        <div className="auth-showcase-glow" />
         <div className="sidebar-brand auth-brand">
           <div className="sidebar-logo"><div className="sidebar-logo-dot" /></div>
           <div className="sidebar-name">Gapwise</div>
         </div>
 
         <div className="auth-showcase-body">
-          <div className="auth-eyebrow mono">Outreach that arrives as a working solution</div>
           <h1 className="auth-headline">
-            Find the gap. <span className="auth-headline-accent">Ship the fix.</span> Win the client.
+            <span>Spot the gap.</span>
+            <span>Ship the fix.</span>
+            <span>Win the client.</span>
           </h1>
-          <ol className="auth-steps">
-            {STEPS.map((s, i) => (
-              <li key={s.t} className="auth-step fade-in" style={{ animationDelay: `${0.1 + i * 0.08}s` }}>
-                <div>
-                  <div className="auth-step-title">{s.t}</div>
-                  <div className="auth-step-desc">{s.d}</div>
-                </div>
-              </li>
-            ))}
-          </ol>
+          <p className="auth-lede">
+            Gapwise finds local businesses with weak websites, builds each one a working page, and sends it to the owner.
+          </p>
         </div>
 
-        <div className="auth-ticker">
-          <span className="auth-ticker-dot pulse" />
-          <span className="mono">Riverbend Dental</span>
-          <span className="auth-ticker-what">booking page built in 2m</span>
-        </div>
+        <AuditDemo />
       </aside>
 
       <main className="auth-panel">
