@@ -4,6 +4,7 @@ import {
   type BreakdownOption, type CampaignAnalysis, type CampaignSummary,
 } from '../lib/api'
 import { useSession } from '../components/LoginGate'
+import type { MarketAnalysis } from '../lib/api'
 
 interface Props {
   campaignId: string | null
@@ -184,6 +185,8 @@ const AnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onOpenCampaign, onN
                 </div>
               </section>
 
+              <Opportunity m={m} />
+
               <section className="an-insights">
                 <div className="an-section-title">What this means</div>
                 <ul>
@@ -273,3 +276,107 @@ const AnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onOpenCampaign, onN
 }
 
 export default AnalysisPage
+
+// How promising the market is for selling a first website or a fix, from Graph8's numbers. Weighted:
+// no website 45%, a named decision maker 25% (phone when unknown), phone 20%, new businesses 10%.
+function opportunityScore(m: MarketAnalysis) {
+  if (!m.total) return null
+  const share = (n: number | null | undefined, of: number) => (n == null || !of ? null : Math.min(1, n / of))
+  const noWeb = share(m.noWebsite, m.total) ?? 0
+  const phone = share(m.withPhone, m.total) ?? 0
+  const s = m.insights?.sample
+  const dm = s ? share(s.withDecisionMaker, s.size) : null
+  const fresh = share(m.insights?.newBusinesses, m.total)
+  return Math.round(100 * (0.45 * noWeb + 0.25 * (dm ?? phone) + 0.2 * phone + 0.1 * (fresh ?? 0)))
+}
+
+const Opportunity: FC<{ m: MarketAnalysis }> = ({ m }) => {
+  const i = m.insights
+  if (!i) {
+    return (
+      <section className="an-callout">
+        <div className="an-callout-title">New market signals available</div>
+        <div className="text-muted">Press <strong>Refresh from Graph8</strong> to add the opportunity score, decision makers, new businesses and social presence for this market.</div>
+      </section>
+    )
+  }
+  const score = opportunityScore(m)
+  const s = i.sample
+  const verdict = score == null ? '' : score >= 60 ? 'Strong opportunity' : score >= 35 ? 'Moderate opportunity' : 'Mature market'
+  const topCity = m.breakdowns.city?.[0]?.label
+  const pctOf = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
+  return (
+    <section className="opp">
+      <div className="opp-hero">
+        <div className="opp-score" data-level={score == null ? 'none' : score >= 60 ? 'high' : score >= 35 ? 'mid' : 'low'}>
+          <strong>{score ?? '—'}</strong><span>/100</span>
+        </div>
+        <div>
+          <div className="an-tile-label">Market opportunity</div>
+          <div className="opp-verdict">{verdict}</div>
+          <p className="opp-why">
+            Weighted from businesses with no website (45%), a named decision maker (25%), a phone number (20%) and
+            new businesses (10%).
+          </p>
+        </div>
+      </div>
+
+      <div className="opp-tiles">
+        <div className="an-tile">
+          <div className="an-tile-label">Reachable, no website</div>
+          <div className="an-tile-value">{i.reachableNoWebsite == null ? '—' : fmt(i.reachableNoWebsite)}</div>
+          <div className="an-tile-note">{i.reachableNoWebsite == null ? 'Graph8 could not count this' : `${pct(i.reachableNoWebsite, m.total)}% have a phone but no site`}</div>
+        </div>
+        <div className="an-tile">
+          <div className="an-tile-label">New businesses</div>
+          <div className="an-tile-value">{i.newBusinesses == null ? '—' : fmt(i.newBusinesses)}</div>
+          <div className="an-tile-note">{i.newBusinesses == null ? 'Founding year not available' : 'founded in the last 3 years'}</div>
+        </div>
+        <div className="an-tile">
+          <div className="an-tile-label">Decision maker found</div>
+          <div className="an-tile-value">{s ? `${pctOf(s.withDecisionMaker, s.size)}%` : '—'}</div>
+          <div className="an-tile-note">{s ? `owner or manager, in a sample of ${s.size}` : 'no sample'}</div>
+        </div>
+        <div className="an-tile">
+          <div className="an-tile-label">Email on file</div>
+          <div className="an-tile-value">{s ? `${pctOf(s.withEmail, s.size)}%` : '—'}</div>
+          <div className="an-tile-note">{s ? `of ${s.size} sampled businesses` : 'no sample'}</div>
+        </div>
+      </div>
+
+      <div className="an-grid">
+        {s && (
+          <div className="an-card">
+            <div className="an-card-head">
+              <span className="an-section-title">Online presence</span>
+              <span className="an-card-note">Sample of {s.size} businesses</span>
+            </div>
+            <BarList
+              items={[
+                { label: 'Has a phone number', count: s.withPhone },
+                { label: 'On LinkedIn', count: s.withLinkedin },
+                { label: 'On Facebook', count: s.withFacebook },
+                { label: 'No website', count: s.noWebsite },
+              ]}
+              total={s.size}
+              empty="No sample."
+            />
+          </div>
+        )}
+        <div className="an-card">
+          <div className="an-card-head"><span className="an-section-title">Where to start</span></div>
+          <ul className="opp-plan">
+            {i.reachableNoWebsite ? (
+              <li><strong>Target the {fmt(i.reachableNoWebsite)} businesses with a phone but no website{topCity ? `, starting in ${topCity}` : ''}.</strong> Lead with a booking page or a fast landing page.</li>
+            ) : (
+              <li><strong>Most businesses here already have a site.</strong> Pitch improvements: speed, online booking and lead capture.</li>
+            )}
+            {!!i.newBusinesses && <li><strong>{fmt(i.newBusinesses)} opened in the last 3 years.</strong> New businesses often need their first website and reviews.</li>}
+            {s && s.withDecisionMaker < s.size / 2 && <li><strong>Decision makers are hard to find in this market.</strong> Enrich leads on Audit before writing to them, or call first.</li>}
+            {s && s.withEmail >= s.size / 2 && <li><strong>Email works here:</strong> {pctOf(s.withEmail, s.size)}% of sampled businesses have an email on file.</li>}
+          </ul>
+        </div>
+      </div>
+    </section>
+  )
+}

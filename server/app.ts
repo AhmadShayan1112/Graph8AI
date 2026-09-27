@@ -4,6 +4,7 @@ import {
   searchCompaniesByFilters,
   getFilterOptions,
   getFilteredFilterOptions,
+  type G8Company,
   type SearchFilter,
   searchContactsByDomains,
   autocomplete,
@@ -27,9 +28,9 @@ import { countSearches, deleteSearch, deleteSearchesFor, getSearch, listSearches
 import {
   campaignForSearch, campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
-  getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
+  getMarketAnalysis, saveMarketAnalysis, getCampaignLead, leadsForCampaigns, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
-import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
+import { fitsFor, gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
 import { GeminiError, listGeminiModels, modelInUse, resetModelChoice, testGemini } from './gemini.js'
 import { assistantChat, publicAssistantChat } from './assistant.js'
 import { createTicket, createVisitorTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
@@ -653,20 +654,49 @@ async function computeMarket(target: CampaignTarget, username: string): Promise<
     if (best.total >= 5) break
   }
   const { mode, filters, total } = best!
-  const count = (extra: SearchFilter) => searchCompaniesByFilters([...filters, extra], 1).then(r => r.pagination.total)
-  const [noWebsite, withPhone, breakdowns] = await Promise.all([
+  const count = (...extra: SearchFilter[]) => searchCompaniesByFilters([...filters, ...extra], 1).then(r => r.pagination.total)
+  // Optional signals: a field Graph8 does not support gives null instead of failing the whole analysis.
+  const maybe = (p: Promise<number>) => p.catch(err => { console.error('[analysis] signal skipped:', err.message); return null })
+  const year = new Date().getFullYear()
+  const [noWebsite, withPhone, breakdowns, reachableNoWebsite, newBusinesses, sample] = await Promise.all([
     count({ field: 'website', operator: 'is_empty', value: [] }),
     count({ field: 'phone', operator: 'is_not_empty', value: [] }),
     getFilteredFilterOptions(filters, BREAKDOWN_FIELDS, 10).catch(err => {
       console.error('[analysis] breakdowns failed:', err.message)
       return {} as MarketAnalysis['breakdowns']
     }),
+    maybe(count({ field: 'website', operator: 'is_empty', value: [] }, { field: 'phone', operator: 'is_not_empty', value: [] })),
+    maybe(count({ field: 'founded_year', operator: 'between', value: [String(year - 3), String(year)] })),
+    sampleMarket(filters).catch(err => { console.error('[analysis] sample skipped:', err.message); return null }),
   ])
   return {
     filtersUsed: { industryField: mode, industries: target.industries, locations },
     total, noWebsite, withPhone, breakdowns,
+    insights: { reachableNoWebsite, newBusinesses, sample },
     computedAt: new Date(),
     computedBy: username,
+  }
+}
+
+// Up to 100 of the market's businesses and their contacts: how many have a decision maker, an email,
+// social profiles and a phone. Uses the same company and contact searches as Discover.
+async function sampleMarket(filters: SearchFilter[]) {
+  const companies = (await searchCompaniesByFilters(filters, 100)).data.filter((c: G8Company) => c.name?.trim())
+  if (!companies.length) return null
+  const domains = companies.map(c => c.domain).filter(Boolean)
+  const contacts = domains.length ? (await searchContactsByDomains(domains, 100).catch(() => ({ data: [] }))).data : []
+  const senior = /owner|founder|ceo|president|principal|partner|director|manager|c_suite|vp|head/i
+  const withDm = new Set(contacts.filter(c => senior.test(`${c.seniority_level} ${c.job_title}`)).map(c => c.company_domain))
+  const withEmail = new Set(contacts.filter(c => c.work_email && c.work_email.trim()).map(c => c.company_domain))
+  const has = (v?: string) => !!v && !!v.trim()
+  return {
+    size: companies.length,
+    withLinkedin: companies.filter(c => has(c.linkedin_url)).length,
+    withFacebook: companies.filter(c => has(c.facebook_url)).length,
+    withPhone: companies.filter(c => has(c.phone)).length,
+    noWebsite: companies.filter(c => !has(c.domain) && !has(c.website)).length,
+    withDecisionMaker: companies.filter(c => c.domain && withDm.has(c.domain)).length,
+    withEmail: companies.filter(c => c.domain && withEmail.has(c.domain)).length,
   }
 }
 
@@ -786,6 +816,57 @@ app.get('/api/support/tickets/:id', getTicket)
 app.post('/api/support/tickets/:id/replies', replyToTicket)
 app.patch('/api/support/tickets/:id', setTicketStatus)
 
+// Lead temperature: every saved lead scored from the evidence Gapwise has, so the hottest get worked first.
+//   fit (gap analysis)           up to 50 points (fit / 2)
+//   verified email               20   · named decision maker 10 · phone 5
+//   no website                   15   · otherwise a weak site (health < 40) 10, fair (40-69) 5
+// Hot 55+, warm 30-54, cold below 30.
+type Temp = 'hot' | 'warm' | 'cold'
+function scoreLead(lead: Record<string, any>, fit: number | null) {
+  const e = lead.enrichment
+  const reasons: string[] = []
+  let points = 0
+  if (fit !== null) { points += fit / 2; reasons.push(`fit ${fit}`) }
+  if (e?.email?.verified) { points += 20; reasons.push('verified email') }
+  if (e?.person?.name) { points += 10; reasons.push('decision maker known') }
+  if (e?.company?.phone || e?.person?.phone) { points += 5; reasons.push('phone') }
+  if (!lead.site) { points += 15; reasons.push('no website') }
+  else if (lead.score < 40) { points += 10; reasons.push(`weak site (${lead.score})`) }
+  else if (lead.score < 70) { points += 5; reasons.push(`site ${lead.score}`) }
+  const temp: Temp = points >= 55 ? 'hot' : points >= 30 ? 'warm' : 'cold'
+  return { points: Math.round(points), temp, reasons }
+}
+
+async function leadTemperature(campaigns: Array<{ id: string; name: string }>) {
+  const ids = campaigns.map(c => new ObjectId(c.id))
+  const [saved, fits] = await Promise.all([leadsForCampaigns(ids), fitsFor(ids)])
+  const names = new Map(campaigns.map(c => [c.id, c.name]))
+  const counts = { hot: 0, warm: 0, cold: 0 }
+  const byCampaign = new Map<string, { hot: number; warm: number; cold: number }>()
+  let notAnalysed = 0
+  let notEnriched = 0
+  const scored = saved.map(({ campaignId, lead }) => {
+    const g = fits.get(`${campaignId}:${lead.id}`)
+    if (!g) notAnalysed++
+    if (!lead.enrichment) notEnriched++
+    const s = scoreLead(lead, g ? g.fit : null)
+    counts[s.temp]++
+    const c = byCampaign.get(campaignId) ?? { hot: 0, warm: 0, cold: 0 }
+    c[s.temp]++
+    byCampaign.set(campaignId, c)
+    return { campaignId, campaignName: names.get(campaignId) ?? '', leadId: String(lead.id), name: String(lead.name ?? ''), city: String(lead.city ?? ''), offer: g?.offer ?? '', ...s }
+  })
+  return {
+    total: saved.length,
+    ...counts,
+    notAnalysed,
+    notEnriched,
+    byCampaign: [...byCampaign].map(([id, c]) => ({ id, name: names.get(id) ?? '', ...c }))
+      .sort((a, b) => b.hot - a.hot || b.warm - a.warm).slice(0, 6),
+    hottest: scored.filter(s => s.temp !== 'cold').sort((a, b) => b.points - a.points).slice(0, 8),
+  }
+}
+
 // Dashboard: one read that summarises everything this person can see (the admin sees the whole workspace).
 app.get('/api/dashboard', async (_req, res) => {
   const auth = getAuth(res)
@@ -794,13 +875,14 @@ app.get('/api/dashboard', async (_req, res) => {
     const ids = campaigns.map(c => new ObjectId(c.id))
     const names = new Map(campaigns.map(c => [c.id, c.name]))
     const siteCol = await sites()
-    const [searchCount, searches, gaps, siteCount, recentSites, keys] = await Promise.all([
+    const [searchCount, searches, gaps, siteCount, recentSites, keys, temperature] = await Promise.all([
       countSearches(auth),
       listSearches(auth),
       gapStatsFor(ids),
       siteCol.countDocuments({}),
       siteCol.find({}, { projection: { html: 0 } }).sort({ updatedAt: -1 }).limit(5).toArray(),
       auth.role === 'admin' ? secretStatus() : Promise.resolve(null),
+      leadTemperature(campaigns).catch(err => { console.error('[dashboard] temperature failed:', err.message); return null }),
     ])
     res.json({
       scope: auth.role === 'admin' ? 'workspace' : 'mine',
@@ -822,6 +904,7 @@ app.get('/api/dashboard', async (_req, res) => {
       })),
       sites: recentSites.map(s => ({ slug: s._id, leadName: s.leadName, mvpType: s.mvpType, updatedAt: s.updatedAt })),
       keys: keys && { graph8: keys.graph8.configured, claude: keys.claude.configured, gemini: keys.gemini.configured },
+      temperature,
     })
   } catch (err: any) {
     console.error('[dashboard]', err.message)

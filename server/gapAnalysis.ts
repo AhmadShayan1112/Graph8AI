@@ -239,3 +239,11 @@ export async function gapStatsFor(campaignIds: ObjectId[], limit = 6) {
     })),
   }
 }
+
+// Fit score and recommended offer per campaign lead, keyed `${campaignId}:${leadId}`.
+export async function fitsFor(campaignIds: ObjectId[]) {
+  const docs = await (await gapAnalyses())
+    .find({ campaignId: { $in: campaignIds } }, { projection: { campaignId: 1, leadId: 1, 'result.prospect.fitScore': 1, 'result.prospect.recommendedOffer': 1 } })
+    .toArray()
+  return new Map(docs.map(d => [`${d.campaignId}:${d.leadId}`, { fit: d.result?.prospect?.fitScore ?? 0, offer: d.result?.prospect?.recommendedOffer ?? '' }]))
+}

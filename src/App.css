@@ -2645,6 +2645,57 @@ body {
   .picker-open { display: none; }
 }
 
+/* ─── Lead temperature (dashboard) ─── */
+.temp-panel { gap: 14px; }
+.temp-how { font-size: 13px; line-height: 1.55; color: #3C4049; background: #FAFAF8; border-radius: 8px; padding: 10px 12px; }
+.temp-bar { display: flex; gap: 2px; height: 26px; border-radius: 8px; overflow: hidden; }
+.temp-seg { display: flex; align-items: center; justify-content: center; min-width: 6px; color: #fff; font-size: 11.5px; font-weight: 600; }
+.temp-seg.hot { background: #E5484D; }
+.temp-seg.warm { background: #E09B1A; }
+.temp-seg.cold { background: #5B7FB8; }
+.temp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 18px; }
+.temp-cards { display: flex; flex-direction: column; gap: 8px; }
+.temp-card { padding: 12px 14px; border: 1px solid #ECECE8; border-radius: 10px; border-left-width: 4px; }
+.temp-card.hot { border-left-color: #E5484D; }
+.temp-card.warm { border-left-color: #E09B1A; }
+.temp-card.cold { border-left-color: #5B7FB8; }
+.temp-card-top { display: flex; align-items: baseline; gap: 8px; }
+.temp-dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.temp-dot.hot { background: #E5484D; } .temp-dot.warm { background: #E09B1A; } .temp-dot.cold { background: #5B7FB8; }
+.temp-card-label { font-weight: 600; font-size: 14px; }
+.temp-card-count { margin-left: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.temp-card-pct { font-size: 12px; color: #8A8E97; min-width: 36px; text-align: right; }
+.temp-card p { margin: 4px 0 6px; font-size: 13px; color: #5E636E; line-height: 1.45; }
+.temp-nudge { font-size: 12.5px; color: #5E636E; line-height: 1.5; padding: 8px 2px 0; }
+.temp-sub-head { font-size: 12.5px; font-weight: 600; color: #5E636E; margin-bottom: 4px; }
+.temp-points { flex: none; min-width: 34px; height: 26px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.temp-points.hot { background: #FDEBEC; color: #B4232A; }
+.temp-points.warm { background: #FCF1DB; color: #8A5A00; }
+.temp-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.temp-reasons span { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: #F2F2EF; color: #4A4E59; }
+.temp-campaigns { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #F1F1EE; padding-top: 12px; }
+.temp-campaign-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto; align-items: center; gap: 12px; font-size: 13px; }
+.temp-campaign-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.temp-mini { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; background: #F0F0EC; }
+.temp-campaign-nums { font-size: 12px; color: #6B7080; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.temp-campaign-nums .hot { color: #B4232A; } .temp-campaign-nums .warm { color: #8A5A00; }
+@media (max-width: 900px) { .temp-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .temp-campaign-row { grid-template-columns: 1fr auto; } .temp-mini { grid-column: 1 / -1; order: 3; } }
+
+/* ─── Market opportunity (analysis) ─── */
+.opp { display: flex; flex-direction: column; gap: 12px; }
+.opp-hero { display: flex; align-items: center; gap: 18px; padding: 18px; border-radius: 12px; background: #fff; border: 1px solid #E7E7E3; }
+.opp-score { flex: none; width: 92px; height: 92px; border-radius: 50%; display: flex; align-items: baseline; justify-content: center; padding-top: 26px; border: 6px solid #D6D6D1; }
+.opp-score[data-level="high"] { border-color: #22A06B; } .opp-score[data-level="mid"] { border-color: #E09B1A; } .opp-score[data-level="low"] { border-color: #5B7FB8; }
+.opp-score strong { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+.opp-score span { font-size: 12px; color: #8A8E97; }
+.opp-verdict { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; margin: 2px 0 4px; }
+.opp-why { font-size: 12.5px; color: #6B7080; line-height: 1.5; margin: 0; }
+.opp-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.opp-plan { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; line-height: 1.5; color: #3C4049; }
+@media (max-width: 1024px) { .opp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .opp-hero { flex-direction: column; align-items: flex-start; } }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {

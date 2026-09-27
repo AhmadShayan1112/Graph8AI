@@ -227,6 +227,14 @@ export interface MarketAnalysis {
   noWebsite: number
   withPhone: number
   breakdowns: Record<string, BreakdownOption[]>
+  insights?: {
+    reachableNoWebsite: number | null
+    newBusinesses: number | null
+    sample: {
+      size: number; withLinkedin: number; withFacebook: number; withPhone: number
+      noWebsite: number; withDecisionMaker: number; withEmail: number
+    } | null
+  }
   computedAt: string
   computedBy: string
 }
@@ -332,6 +340,22 @@ export interface Dashboard {
   }>
   sites: DeployedSite[]
   keys: { graph8: boolean; claude: boolean; gemini: boolean } | null
+  temperature: LeadTemperature | null
+}
+
+export type Temp = 'hot' | 'warm' | 'cold'
+export interface LeadTemperature {
+  total: number
+  hot: number
+  warm: number
+  cold: number
+  notAnalysed: number
+  notEnriched: number
+  byCampaign: Array<{ id: string; name: string; hot: number; warm: number; cold: number }>
+  hottest: Array<{
+    campaignId: string; campaignName: string; leadId: string; name: string; city: string
+    offer: string; points: number; temp: Temp; reasons: string[]
+  }>
 }
 
 export const getDashboard = () => apiFetch<Dashboard>('/dashboard')

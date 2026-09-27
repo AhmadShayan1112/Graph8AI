@@ -26,7 +26,10 @@ Records: Pipeline, History. Admin only: Users, Settings. Back returns to the pre
 The box at the bottom of the menu shows who is signed in and which tools are on.
 
 ## Dashboard  [#/dashboard]
-Totals (campaigns, saved leads, searches, gap analyses, live sites; each is clickable), top prospects ranked by
+Totals (campaigns, saved leads, searches, gap analyses, live sites; each is clickable); Lead temperature: every
+saved lead scored hot, warm or cold (points: gap-analysis fit / 2 up to 50, verified email 20, named decision
+maker 10, phone 5, no website 15 or a weak site 10 / fair site 5; hot 55+, warm 30-54, cold under 30) with what
+to do next for each group, the hottest leads with their reasons, and a breakdown by campaign; top prospects by
 fit score, a getting-started checklist, recent campaigns and recent activity. The admin sees the whole
 workspace; users see their own work.
 
@@ -64,7 +67,11 @@ Researches each saved lead of a campaign on the web, on top of Graph8's company 
 
 ## Analysis  [#/analysis]  (refresh needs Graph8 access)
 Sizes a campaign's target market: market size, businesses with no website, businesses with a phone number,
-coverage by your saved leads, and breakdowns by company size, revenue, city and industry, plus plain takeaways
+coverage by your saved leads, and breakdowns by company size, revenue, city and industry, plus plain takeaways.
+It also shows a market opportunity score out of 100 (no website 45%, named decision maker 25%, phone 20%, new
+businesses 10%), businesses reachable by phone without a website, businesses founded in the last 3 years, and from
+a sample of 100 businesses: decision makers found, email on file and LinkedIn / Facebook / phone presence, with a
+"where to start" plan
 and your saved leads' health and common gaps. "Run analysis" / "Refresh from Graph8" recomputes; viewing is free.
 
 ## Audit  [#/audit]

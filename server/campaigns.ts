@@ -221,8 +221,27 @@ export interface MarketAnalysis {
   noWebsite: number
   withPhone: number
   breakdowns: Record<string, Array<{ id: string; label: string; count: number }>>
+  // Extra market signals; each is null when Graph8 could not answer it.
+  insights?: MarketInsights
   computedAt: Date
   computedBy: string
+}
+
+export interface MarketInsights {
+  // Businesses with a phone number but no website: the easiest first-site sale.
+  reachableNoWebsite: number | null
+  // Founded in the last three years.
+  newBusinesses: number | null
+  // Measured on a sample of the market's businesses and their contacts.
+  sample: {
+    size: number
+    withLinkedin: number
+    withFacebook: number
+    withPhone: number
+    noWebsite: number
+    withDecisionMaker: number
+    withEmail: number
+  } | null
 }
 
 async function analyses() {
@@ -305,4 +324,11 @@ export async function campaignForSearch(auth: AuthInfo, target: CampaignTarget, 
   }
   await campaigns.insertOne(doc)
   return { campaign: toPublic(doc, auth), id: doc._id, created: true }
+}
+
+// Saved leads across campaigns, for the dashboard's lead temperature (newest first, bounded).
+export async function leadsForCampaigns(ids: ObjectId[], limit = 3000) {
+  const { leads } = await collections()
+  const docs = await leads.find({ campaignId: { $in: ids } }).sort({ addedAt: -1 }).limit(limit).toArray()
+  return docs.map(d => ({ campaignId: String(d.campaignId), lead: d.lead as Record<string, any> }))
 }
