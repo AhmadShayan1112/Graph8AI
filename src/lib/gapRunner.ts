@@ -20,6 +20,8 @@ export interface RunnerState {
   stopping: boolean
   durations: number[]
   lastError: string
+  // Set while waiting to retry a lead that hit the usage limit.
+  retry: { at: number; attempt: number; of: number; reason: string } | null
   // Finished analyses from this session, keyed `${campaignId}:${leadId}`, so pages can show them.
   results: Record<string, GapAnalysis>
   paused: Paused | null
@@ -29,7 +31,7 @@ const KEY = 'gapwise:gap-run'
 let owner = ''
 let state: RunnerState = {
   campaignId: null, campaignName: '', queue: [], total: 0, done: 0, current: null,
-  stopping: false, durations: [], lastError: '', results: {}, paused: null,
+  stopping: false, durations: [], lastError: '', retry: null, results: {}, paused: null,
 }
 const listeners = new Set<() => void>()
 
@@ -53,7 +55,7 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   e.returnValue = ''
 }
 
-export const isRunning = () => !!state.current || state.queue.length > 0
+export const isRunning = () => !!state.current || state.queue.length > 0 || !!state.retry
 
 // Called once the signed-in person is known, to pick up a run their previous visit left unfinished.
 export function initRunner(username: string) {
@@ -97,12 +99,22 @@ export function dismissPaused() {
   save(null)
 }
 
+// When the research service is at its usage limit, wait and try the same lead again: 30 s, 60 s, 90 s…
+const LIMIT_RETRIES = 5
+const retryWaitMs = (attempt: number) => 30_000 * attempt
+
+async function waitUnlessStopped(ms: number) {
+  const until = Date.now() + ms
+  while (Date.now() < until && !state.stopping) await new Promise(r => setTimeout(r, 500))
+}
+
 async function loop() {
   const campaignId = state.campaignId!
+  let limitRetries = 0
   while (state.queue.length && !state.stopping) {
     const [lead, ...rest] = state.queue
     const startedAt = Date.now()
-    set({ queue: rest, current: { leadId: lead.id, leadName: lead.name, phase: 'starting', phaseAt: startedAt, startedAt, seen: ['starting'] } })
+    set({ queue: rest, retry: null, current: { leadId: lead.id, leadName: lead.name, phase: 'starting', phaseAt: startedAt, startedAt, seen: ['starting'] } })
     save([lead, ...rest])
     try {
       const analysis = await runGapAnalysis(campaignId, lead.id, stage => {
@@ -115,8 +127,18 @@ async function loop() {
         done: state.done + 1,
         current: null,
       })
+      limitRetries = 0
       save(state.queue)
     } catch (err: any) {
+      if (err?.status === 429 && limitRetries < LIMIT_RETRIES && !state.stopping) {
+        limitRetries++
+        const wait = retryWaitMs(limitRetries)
+        // Put the lead back at the front and try it again after the wait.
+        set({ queue: [lead, ...state.queue], current: null, retry: { at: Date.now() + wait, attempt: limitRetries, of: LIMIT_RETRIES, reason: err.message } })
+        await waitUnlessStopped(wait)
+        set({ retry: null })
+        continue
+      }
       // A key or quota problem fails every lead the same way, so pause and let the person resume later.
       const remaining = [lead, ...state.queue]
       set({
@@ -134,7 +156,7 @@ async function loop() {
   } else if (!state.lastError) {
     save(null)
   }
-  set({ current: null, stopping: false })
+  set({ current: null, stopping: false, retry: null })
   window.removeEventListener('beforeunload', onBeforeUnload)
 }
 

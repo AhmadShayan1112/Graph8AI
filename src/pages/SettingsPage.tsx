@@ -1,5 +1,5 @@
 import { useEffect, useState, type FC, type FormEvent } from 'react'
-import { deleteSecret, getSettings, saveSecret, type SecretKind, type SettingsStatus } from '../lib/api'
+import { deleteSecret, getSettings, saveSecret, testGeminiKey, type SecretKind, type SettingsStatus } from '../lib/api'
 
 const FIELDS: Array<{ kind: SecretKind; label: string; help: string; placeholder: string }> = [
   {
@@ -80,9 +80,28 @@ interface FieldProps {
 
 const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, onChange }) => {
   const [value, setValue] = useState('')
-  const [busy, setBusy] = useState<'save' | 'delete' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'delete' | 'test' | null>(null)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [checks, setChecks] = useState<Array<{ label: string; ok: boolean; text: string }> | null>(null)
   const savedHere = state.configured && state.source !== 'env'
+
+  // Gemini only: try the saved key for a plain answer and for web research, and show Google's reply.
+  const test = async () => {
+    setBusy('test')
+    setMessage(null)
+    setChecks(null)
+    try {
+      const r = await testGeminiKey()
+      setChecks([
+        { label: 'Assistant', ok: r.assistant.ok, text: r.assistant.ok ? `Works (model ${r.assistant.model})` : r.assistant.error ?? 'Failed' },
+        { label: 'Gap analysis (web research)', ok: r.research.ok, text: r.research.ok ? `Works (model ${r.research.model})` : r.research.error ?? 'Failed' },
+      ])
+    } catch (err: any) {
+      setMessage({ text: err.message, ok: false })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
@@ -143,6 +162,11 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
         <button className="btn-primary" type="submit" disabled={!value.trim() || !!busy}>
           {busy === 'save' ? 'Saving…' : savedHere ? 'Replace' : 'Save'}
         </button>
+        {savedHere && kind === 'gemini' && (
+          <button className="btn-secondary" type="button" onClick={test} disabled={!!busy}>
+            {busy === 'test' ? 'Testing… (up to a few minutes)' : 'Test key'}
+          </button>
+        )}
         {savedHere && (
           <button className="btn-secondary btn-danger" type="button" onClick={remove} disabled={!!busy}>
             {busy === 'delete' ? 'Deleting…' : 'Delete'}
@@ -150,6 +174,21 @@ const SecretField: FC<FieldProps> = ({ kind, label, help, placeholder, state, on
         )}
       </div>
       {message && <div className={`settings-message ${message.ok ? 'ok' : 'bad'}`}>{message.text}</div>}
+      {checks && (
+        <ul className="key-checks">
+          {checks.map(c => (
+            <li key={c.label} className={c.ok ? 'ok' : 'bad'}>
+              <strong>{c.ok ? '✓' : '✕'} {c.label}:</strong> {c.text}
+            </li>
+          ))}
+          {checks.some(c => !c.ok) && (
+            <li className="key-hint">
+              “429” or “quota” means Google is limiting this key: wait and test again, turn on billing for the key’s
+              Google Cloud project, or create a new key in Google AI Studio. “API key not valid” means the key is wrong.
+            </li>
+          )}
+        </ul>
+      )}
     </form>
   )
 }

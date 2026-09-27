@@ -47,7 +47,7 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
 
   // Runs live in the app-wide runner, so they continue while this page is closed.
   const run = useGapRunner()
-  const active = !!run.current || run.queue.length > 0
+  const active = !!run.current || run.queue.length > 0 || !!run.retry
   const mine = !!campaign && run.campaignId === campaign.id
   const progress = mine ? run.current : null
   const running = progress?.leadId ?? null
@@ -64,10 +64,10 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
   const canRun = user.permissions.gemini
 
   useEffect(() => {
-    if (!run.current) return
+    if (!run.current && !run.retry) return
     const t = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(t)
-  }, [run.current])
+  }, [run.current, run.retry])
 
   // During "Analyse all", keep the lead being researched on screen.
   useEffect(() => {
@@ -190,6 +190,16 @@ const GapAnalysisPage: FC<Props> = ({ campaignId, onCampaignId, onBuild, onAudit
         <div className="gap-progress gap-elsewhere">
           <span>A gap analysis is running for <strong>{run.campaignName}</strong>. New runs can start when it finishes.</span>
           <button className="dash-link" onClick={() => run.campaignId && onCampaignId(run.campaignId)}>View it</button>
+        </div>
+      )}
+
+      {mine && run.retry && (
+        <div className="gap-progress gap-paused" role="status" aria-live="polite">
+          <div className="gap-progress-row">
+            <span className="gap-progress-title">Usage limit reached. Trying {run.queue[0]?.name ?? 'the lead'} again in {seconds(Math.max(0, run.retry.at - now))}</span>
+            <span className="gap-progress-pct">Retry {run.retry.attempt} of {run.retry.of}</span>
+          </div>
+          <div className="gap-progress-meta"><span>{run.retry.reason}</span></div>
         </div>
       )}
 

@@ -177,7 +177,8 @@ function readTurns(req: Request, res: Response) {
   return turns as Array<{ role: 'user' | 'model'; text: string }>
 }
 
-async function streamReply(res: Response, system: string, turns: Array<{ role: 'user' | 'model'; text: string }>) {
+// `showDetail` adds Google's own reason to errors; only for the admin, who can fix keys and quota.
+async function streamReply(res: Response, system: string, turns: Array<{ role: 'user' | 'model'; text: string }>, showDetail = false) {
   res.status(200)
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('X-Accel-Buffering', 'no')
@@ -188,7 +189,8 @@ async function streamReply(res: Response, system: string, turns: Array<{ role: '
     send({ type: 'done' })
   } catch (err: any) {
     if (!(err instanceof GeminiError)) console.error('[assistant]', err.message)
-    send({ type: 'error', error: err instanceof GeminiError ? err.message : 'The assistant could not answer right now. Try again shortly.' })
+    const message = err instanceof GeminiError ? err.message : 'The assistant could not answer right now. Try again shortly.'
+    send({ type: 'error', error: showDetail && err instanceof GeminiError && err.detail ? `${message} Details: ${err.detail}` : message })
   } finally {
     res.end()
   }
@@ -204,7 +206,7 @@ export async function assistantChat(req: Request, res: Response) {
   }
   const page = PAGES.has(req.body?.page) ? req.body.page : ''
   const system = RULES + contextFor(auth, page) + GUIDE + (auth.role === 'admin' ? ADMIN_GUIDE : '')
-  await streamReply(res, system, turns)
+  await streamReply(res, system, turns, auth.role === 'admin')
 }
 
 // ── Public assistant on the landing page ──

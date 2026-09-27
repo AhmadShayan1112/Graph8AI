@@ -408,3 +408,8 @@ export const setTicketStatus = (id: string, status: 'open' | 'closed') =>
 // "Talk to a person" from the public site, where visitors have no account.
 export const contactTeam = (name: string, email: string, message: string, transcript: ChatMessage[]) =>
   apiFetch<{ sent: boolean }>('/public/contact', { method: 'POST', body: JSON.stringify({ name, email, message, transcript }) })
+
+export interface GeminiCheck { ok: boolean; model?: string; error?: string }
+// Admin: one plain and one web-search request with the saved Gemini key.
+export const testGeminiKey = () =>
+  apiFetch<{ assistant: GeminiCheck; research: GeminiCheck }>('/settings-test/gemini', { method: 'POST' })

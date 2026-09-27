@@ -30,7 +30,7 @@ import {
   getMarketAnalysis, saveMarketAnalysis, getCampaignLead, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
 import { gapStatsFor, listGapAnalyses, runGapAnalysis } from './gapAnalysis.js'
-import { GeminiError } from './gemini.js'
+import { GeminiError, testGemini } from './gemini.js'
 import { assistantChat, publicAssistantChat } from './assistant.js'
 import { createTicket, createVisitorTicket, deleteTicketsFor, getTicket, listTickets, replyToTicket, setTicketStatus, supportSummary } from './support.js'
 
@@ -108,6 +108,15 @@ app.delete('/api/settings/:name', async (req, res) => {
 })
 
 // Workspace-wide access: e.g. let every user use Graph8 regardless of their own switch.
+// Admin: check the Gemini key with one plain and one web-search request, and report Google's answer.
+app.post('/api/settings-test/gemini', requireAdmin, async (_req, res) => {
+  try {
+    res.json(await testGemini())
+  } catch (err: any) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/users/access', async (_req, res) => {
   try {
     res.json(await getWorkspaceAccess())
@@ -706,7 +715,11 @@ app.post('/api/campaigns/:id/gaps/:leadId', requirePermission('gemini'), async (
     const analysis = await runGapAnalysis(getAuth(res), found.campaignId, found.lead, stage => send({ type: 'stage', stage }))
     send({ type: 'done', analysis })
   } catch (err: any) {
-    if (err instanceof GeminiError) send({ type: 'error', error: err.message, status: err.status })
+    if (err instanceof GeminiError) {
+      // The admin also gets Google's own reason, so a key or quota problem can be fixed.
+      const detail = getAuth(res).role === 'admin' && err.detail ? ` Details: ${err.detail}` : ''
+      send({ type: 'error', error: err.message + detail, status: err.status })
+    }
     else {
       console.error('[gaps] run failed:', err.message)
       send({ type: 'error', error: 'The gap analysis failed. Try again shortly.', status: 502 })

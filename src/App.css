@@ -2548,6 +2548,11 @@ body {
 .gap-bar span.is-still::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .runner-dot { animation: none; } .runner-chip-bar span { transition: none; } }
 
+.key-checks { list-style: none; margin: 4px 0 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #FAFAF8; border-radius: 6px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.key-checks .ok strong { color: #1B7A4E; }
+.key-checks .bad strong { color: #C0341D; }
+.key-hint { color: #5E636E; font-size: 12.5px; border-top: 1px solid #EEEEEA; padding-top: 6px; }
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {
