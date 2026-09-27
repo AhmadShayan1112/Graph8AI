@@ -34,6 +34,15 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
   **History** lists them and reopens one in Discover without calling Graph8 again. Users see only their
   own searches; the admin can switch to everyone's. Deleting a user deletes their history.
 
+## Campaigns
+
+- A **campaign** has a name, a goal, and an optional target (industries and locations).
+- **Search in this campaign** opens Discover with the target filled in. Every search run there is saved under
+  the campaign, and every lead it finds is saved to the campaign's lead list (`campaign_leads` collection, one
+  entry per business, up to 1,000 per campaign). Enriching a lead from a campaign saves the enrichment too.
+- The campaign page shows the saved leads and past searches; opening a search restores its results without
+  calling Graph8 again. Users see their own campaigns; the admin can view everyone's.
+
 ## Local development
 
 ```bash

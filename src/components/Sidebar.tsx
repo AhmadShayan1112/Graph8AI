@@ -9,12 +9,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: 'discover', label: 'Discover', num: '01', count: '' },
-  { id: 'audit', label: 'Audit', num: '02' },
-  { id: 'build', label: 'Build & deploy', num: '03' },
-  { id: 'outreach', label: 'Outreach', num: '04' },
-  { id: 'pipeline', label: 'Pipeline', num: '05' },
-  { id: 'history', label: 'History', num: '06' },
+  { id: 'campaigns', label: 'Campaigns', num: '01' },
+  { id: 'discover', label: 'Discover', num: '02', count: '' },
+  { id: 'audit', label: 'Audit', num: '03' },
+  { id: 'build', label: 'Build & deploy', num: '04' },
+  { id: 'outreach', label: 'Outreach', num: '05' },
+  { id: 'pipeline', label: 'Pipeline', num: '06' },
+  { id: 'history', label: 'History', num: '07' },
 ]
 
 interface SidebarProps {

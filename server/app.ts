@@ -23,6 +23,10 @@ import {
   createUser, deleteUser, listUsers, normalizeUsername, parsePermissions, updateUser, validatePassword, validateUsername,
 } from './users.js'
 import { deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } from './history.js'
+import {
+  campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
+  removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
+} from './campaigns.js'
 
 export const app = express()
 app.disable('x-powered-by')
@@ -134,7 +138,7 @@ app.patch('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
   try {
     if (!(await deleteUser(req.params.id))) { res.status(404).json({ error: 'User not found' }); return }
-    await deleteSearchesFor(req.params.id)
+    await Promise.all([deleteSearchesFor(req.params.id), deleteCampaignsFor(req.params.id)])
     res.json({ deleted: true })
   } catch (err: any) {
     console.error('[users] delete failed:', err.message)
@@ -195,6 +199,8 @@ interface DiscoverBody {
   page?: number
   // false for searches the app runs on its own (e.g. the first load), so only real queries are saved.
   save?: boolean
+  // Files the search, and the leads it finds, under this campaign.
+  campaignId?: string
 }
 
 // "Food in Pakistan" -> industry "Food", location "Pakistan"
@@ -268,8 +274,13 @@ function savedFilters(b: DiscoverBody) {
 
 // Pipeline step 1: fetch real leads from Graph8, then step 2: run our gap analysis on each.
 app.post('/api/leads/discover', async (req, res) => {
-  const { save = true, ...asked } = (req.body ?? {}) as DiscoverBody
+  const { save = true, campaignId: campaignParam, ...asked } = (req.body ?? {}) as DiscoverBody
   const body: DiscoverBody = { ...asked }
+  let campaignId: ObjectId | null = null
+  if (campaignParam) {
+    campaignId = await campaignIdFor(getAuth(res), campaignParam).catch(() => null)
+    if (!campaignId) { res.status(404).json({ error: 'That campaign no longer exists.' }); return }
+  }
   if (body.prompt?.trim()) {
     const p = parsePrompt(body.prompt)
     if (p.industry) body.industries = [...(body.industries ?? []), p.industry]
@@ -313,15 +324,19 @@ app.post('/api/leads/discover', async (req, res) => {
     })
 
     // History is a convenience: a failed save must not lose the search the user just paid for.
-    const searchId = save
+    const searchId = save || campaignId
       ? await saveSearch(getAuth(res), {
           prompt: asked.prompt?.trim() ?? '',
           filters: savedFilters(asked),
           matchedOn,
           total: companyRes.pagination.total,
           leads,
+          campaignId,
         }).catch(err => { console.error('[history] save failed:', err.message); null })
       : null
+    if (campaignId) {
+      await saveCampaignLeads(campaignId, leads, searchId).catch(err => console.error('[campaigns] saving leads failed:', err.message))
+    }
 
     res.json({
       leads,
@@ -448,6 +463,87 @@ app.delete('/api/searches/:id', async (req, res) => {
   } catch (err: any) {
     console.error('[history] delete failed:', err.message)
     res.status(503).json({ error: 'Could not delete that search.' })
+  }
+})
+
+// Campaigns group searches and keep the leads they find. Reading them needs no Graph8 access.
+app.get('/api/campaigns', async (_req, res) => {
+  try {
+    res.json({ campaigns: await listCampaigns(getAuth(res)) })
+  } catch (err: any) {
+    console.error('[campaigns] list failed:', err.message)
+    res.status(503).json({ error: 'Could not load campaigns.' })
+  }
+})
+
+app.post('/api/campaigns', async (req, res) => {
+  const input = parseCampaignInput(req.body)
+  if (!input.name) { res.status(400).json({ error: 'Give the campaign a name.' }); return }
+  try {
+    const campaign = await createCampaign(getAuth(res), input)
+    if (!campaign) { res.status(400).json({ error: 'You have reached the limit of 100 campaigns. Delete one first.' }); return }
+    res.json({ campaign })
+  } catch (err: any) {
+    console.error('[campaigns] create failed:', err.message)
+    res.status(503).json({ error: 'Could not create the campaign.' })
+  }
+})
+
+app.get('/api/campaigns/:id', async (req, res) => {
+  try {
+    const found = await getCampaign(getAuth(res), req.params.id)
+    if (!found) { res.status(404).json({ error: 'Campaign not found' }); return }
+    const searches = await listSearches(getAuth(res), new ObjectId(req.params.id))
+    res.json({ ...found, searches })
+  } catch (err: any) {
+    console.error('[campaigns] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load the campaign.' })
+  }
+})
+
+app.patch('/api/campaigns/:id', async (req, res) => {
+  const input = parseCampaignInput(req.body)
+  if (!input.name) { res.status(400).json({ error: 'Give the campaign a name.' }); return }
+  try {
+    const campaign = await updateCampaign(getAuth(res), req.params.id, input)
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return }
+    res.json({ campaign })
+  } catch (err: any) {
+    console.error('[campaigns] update failed:', err.message)
+    res.status(503).json({ error: 'Could not save the campaign.' })
+  }
+})
+
+app.delete('/api/campaigns/:id', async (req, res) => {
+  try {
+    if (!(await deleteCampaign(getAuth(res), req.params.id))) { res.status(404).json({ error: 'Campaign not found' }); return }
+    res.json({ deleted: true })
+  } catch (err: any) {
+    console.error('[campaigns] delete failed:', err.message)
+    res.status(503).json({ error: 'Could not delete the campaign.' })
+  }
+})
+
+// Saves a lead's latest state (e.g. after enrichment) inside the campaign.
+app.put('/api/campaigns/:id/leads', async (req, res) => {
+  const lead = req.body?.lead
+  if (!lead || typeof lead !== 'object' || typeof lead.id !== 'string') { res.status(400).json({ error: 'lead required' }); return }
+  try {
+    if (!(await updateCampaignLead(getAuth(res), req.params.id, lead))) { res.status(404).json({ error: 'Lead not in this campaign' }); return }
+    res.json({ saved: true })
+  } catch (err: any) {
+    console.error('[campaigns] lead update failed:', err.message)
+    res.status(503).json({ error: 'Could not save the lead.' })
+  }
+})
+
+app.delete('/api/campaigns/:id/leads/:leadId', async (req, res) => {
+  try {
+    if (!(await removeCampaignLead(getAuth(res), req.params.id, req.params.leadId))) { res.status(404).json({ error: 'Lead not found' }); return }
+    res.json({ deleted: true })
+  } catch (err: any) {
+    console.error('[campaigns] lead delete failed:', err.message)
+    res.status(503).json({ error: 'Could not remove the lead.' })
   }
 })
 

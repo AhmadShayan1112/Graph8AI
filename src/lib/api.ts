@@ -63,13 +63,14 @@ export interface DiscoverResult {
 }
 
 // `save: false` keeps searches the app runs by itself out of the user's history.
-export async function discoverLeads(filters: DiscoverFilters, save = true): Promise<DiscoverResult> {
-  return apiFetch('/leads/discover', { method: 'POST', body: JSON.stringify({ ...filters, save }) })
+export async function discoverLeads(filters: DiscoverFilters, save = true, campaignId?: string): Promise<DiscoverResult> {
+  return apiFetch('/leads/discover', { method: 'POST', body: JSON.stringify({ ...filters, save, campaignId }) })
 }
 
 export interface SavedSearchSummary {
   id: string
   mine: boolean
+  campaignId: string | null
   username: string
   prompt: string
   filters: DiscoverFilters
@@ -185,3 +186,28 @@ export const createUser = (username: string, password: string, permissions: Perm
 export const updateUser = (id: string, patch: { permissions?: Partial<Permissions>; disabled?: boolean; password?: string }) =>
   apiFetch<{ user: AppUser }>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
 export const deleteUser = (id: string) => apiFetch<{ deleted: boolean }>(`/users/${id}`, { method: 'DELETE' })
+
+export interface CampaignTarget { industries: string[]; locations: DiscoverFilters['locations'] }
+export interface CampaignInput { name: string; description: string; target: CampaignTarget }
+export interface Campaign extends CampaignInput {
+  id: string
+  mine: boolean
+  username: string
+  createdAt: string
+  updatedAt: string
+}
+export interface CampaignSummary extends Campaign { searchCount: number; leadCount: number; lastSearchAt: string | null }
+export type CampaignLead = Lead & { addedAt: string; searchId: string | null }
+export interface CampaignDetail { campaign: Campaign; leads: CampaignLead[]; searches: SavedSearchSummary[] }
+
+export const listCampaigns = () => apiFetch<{ campaigns: CampaignSummary[] }>('/campaigns')
+export const createCampaign = (input: CampaignInput) =>
+  apiFetch<{ campaign: Campaign }>('/campaigns', { method: 'POST', body: JSON.stringify(input) })
+export const getCampaign = (id: string) => apiFetch<CampaignDetail>(`/campaigns/${id}`)
+export const updateCampaign = (id: string, input: CampaignInput) =>
+  apiFetch<{ campaign: Campaign }>(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+export const deleteCampaign = (id: string) => apiFetch<{ deleted: boolean }>(`/campaigns/${id}`, { method: 'DELETE' })
+export const saveCampaignLead = (id: string, lead: Lead) =>
+  apiFetch<{ saved: boolean }>(`/campaigns/${id}/leads`, { method: 'PUT', body: JSON.stringify({ lead }) })
+export const removeCampaignLead = (id: string, leadId: string) =>
+  apiFetch<{ deleted: boolean }>(`/campaigns/${id}/leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' })

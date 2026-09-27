@@ -1,6 +1,6 @@
 import { useEffect, useState, type FC } from 'react'
 import type { Lead } from '../types/lead'
-import { discoverLeads, EMPTY_FILTERS, type DiscoverFilters } from '../lib/api'
+import { discoverLeads, EMPTY_FILTERS, type Campaign, type DiscoverFilters } from '../lib/api'
 import FilterPanel from '../components/FilterPanel'
 import { useSession } from '../components/LoginGate'
 
@@ -8,6 +8,10 @@ interface Props {
   onSelectLead: (lead: Lead) => void
   leads: Lead[]
   setLeads: (leads: Lead[]) => void
+  // When set, searches and the leads they find are saved to this campaign.
+  campaign: Campaign | null
+  onOpenCampaign: (id: string) => void
+  onLeaveCampaign: () => void
 }
 
 const GAP_FILTERS: Array<[string, string]> = [
@@ -27,7 +31,7 @@ let lastFilters: DiscoverFilters = { ...EMPTY_FILTERS, industries: ['Dentists'],
 let lastTotal: number | null = null
 
 // Lets History reopen a saved search with the filters and match count it had.
-export function restoreDiscover(filters: DiscoverFilters, total: number) {
+export function restoreDiscover(filters: DiscoverFilters, total: number | null) {
   lastFilters = { ...EMPTY_FILTERS, ...filters }
   lastTotal = total
 }
@@ -37,7 +41,7 @@ function activeCount(f: DiscoverFilters) {
     + (f.foundedFrom || f.foundedTo ? 1 : 0) + (f.website !== 'any' ? 1 : 0) + (f.hasPhone ? 1 : 0)
 }
 
-const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
+const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOpenCampaign, onLeaveCampaign }) => {
   const canSearch = useSession().user.permissions.graph8
   const [filters, setFiltersState] = useState<DiscoverFilters>(lastFilters)
   const [prompt, setPrompt] = useState('')
@@ -54,7 +58,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
     setLoading(true)
     setError('')
     try {
-      const result = await discoverLeads({ ...f, prompt: promptText || undefined }, save)
+      const result = await discoverLeads({ ...f, prompt: promptText || undefined }, save, campaign?.id)
       setLeads(result.leads)
       setTotal(lastTotal = result.total)
       // Turn the prompt into real filter chips so the user can refine it.
@@ -77,7 +81,8 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
 
   useEffect(() => {
     // The first load is the app's own search, not the user's, so it is not saved to History.
-    if (!leads.length) runSearch(filters, '', false)
+    // Inside a campaign, wait for the user to search so nothing is filed there by accident.
+    if (!leads.length && !campaign) runSearch(filters, '', false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -118,6 +123,20 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads }) => {
             <h1 className="page-title">Businesses with fixable digital gaps</h1>
           </div>
         </header>
+
+        {campaign && (
+          <div className="campaign-banner">
+            <div className="campaign-banner-text">
+              <span className="campaign-banner-label mono">Campaign</span>
+              <strong>{campaign.name}</strong>
+              <span className="text-muted">Searches and every lead they find are saved here.</span>
+            </div>
+            <div className="campaign-banner-actions">
+              <button className="btn-secondary" onClick={() => onOpenCampaign(campaign.id)}>View campaign</button>
+              <button className="btn-secondary" onClick={onLeaveCampaign}>Leave</button>
+            </div>
+          </div>
+        )}
 
         {!canSearch && (
           <div className="settings-alert access-note">

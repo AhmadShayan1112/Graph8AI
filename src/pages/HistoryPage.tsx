@@ -110,6 +110,7 @@ const HistoryPage: FC<{ onOpen: (s: SavedSearch) => void }> = ({ onOpen }) => {
               <span className="settings-card-label">{describe(s)}</span>
               <span className="settings-badge ok">{s.leadCount} leads</span>
             </div>
+            {s.campaignId && <div className="settings-card-help">Saved in a campaign</div>}
             {chips(s).length > 0 && (
               <div className="history-chips">
                 {chips(s).map((c, j) => <span key={j} className="active-chip">{c}</span>)}
