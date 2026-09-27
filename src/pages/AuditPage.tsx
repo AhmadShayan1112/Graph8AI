@@ -10,11 +10,13 @@ interface Props {
   onEnriched: (lead: Lead) => void
   // The campaign the lead was opened from, so its gap analysis can go in the report.
   campaignId?: string
+  // Back to the lead picker.
+  onChooseLead: () => void
 }
 
 const TABS = ['All findings', 'Online Presence', 'Mobile', 'Speed', 'SEO', 'Lead Capture']
 
-const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId }) => {
+const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId, onChooseLead }) => {
   const [exporting, setExporting] = useState(false)
   const [activeTab, setActiveTab] = useState('All findings')
   const [enriching, setEnriching] = useState(!lead.enrichment)
@@ -94,7 +96,10 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched, campaignId })
     <div className="page-content fade-in">
       <header className="page-header">
         <div className="page-header-text">
-          <button className="back-link" onClick={onBack}>← Back to list</button>
+          <div className="audit-nav">
+            <button className="back-link" onClick={onChooseLead}>← Choose another lead</button>
+            <button className="back-link" onClick={onBack}>Discover</button>
+          </div>
           <div className="page-step">Audit</div>
           <h1 className="page-title">{lead.name}</h1>
           <div className="page-subtitle">

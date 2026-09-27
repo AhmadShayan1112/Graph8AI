@@ -70,7 +70,10 @@ and your saved leads' health and common gaps. "Run analysis" / "Refresh from Gra
 ## Audit  [#/audit]
 Details for one lead: digital-health score by category and findings. It automatically looks up the company,
 the decision maker and a verified email with Graph8 (needs Graph8 access). Choose an MVP type to go to Build.
-Open Audit by clicking a lead in Discover, a campaign or Gap analysis.
+Open Audit by clicking a lead in Discover, a campaign or Gap analysis, or open **Audit** from the menu, choose a
+campaign and pick one of its saved leads (badges show which are already enriched by Graph8 or have a gap
+analysis). "Choose another lead" returns to that list. Build & deploy and Outreach use the same picker.
+**Export PDF** on Audit (and on analysed leads in Gap analysis) opens a print-ready report; choose Save as PDF.
 
 ## Build & deploy  [#/build]  (needs Claude access)
 Pick an MVP type (Online booking page, Lead capture form, Mobile-first landing, Fast landing page) and press

@@ -17,6 +17,7 @@ import SupportPage from './pages/SupportPage'
 import AssistantWidget from './components/AssistantWidget'
 import GapRunnerChip from './components/GapRunnerChip'
 import { DialogHost } from './components/Dialog'
+import LeadPicker from './components/LeadPicker'
 import { initRunner } from './lib/gapRunner'
 import LoginGate, { useSession } from './components/LoginGate'
 import { LogoMark } from './components/Logo'
@@ -296,13 +297,16 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           />
         )}
         {['audit', 'build', 'outreach'].includes(page) && !selectedLead && (
-          <div className="page-content fade-in">
-            <div className="an-callout">
-              <div className="an-callout-title">Choose a lead first</div>
-              <div className="text-muted">Open a lead from Discover, a campaign or gap analysis, and it will show here.</div>
-              <button className="btn-primary" onClick={() => handleNavigate('discover')}>Go to Discover</button>
-            </div>
-          </div>
+          <LeadPicker
+            key={page}
+            title={page === 'audit' ? 'Audit a lead' : page === 'build' ? 'Build an MVP for a lead' : 'Write outreach for a lead'}
+            subtitle={page === 'audit'
+              ? 'Choose a campaign, then a lead. Leads Graph8 already enriched open with their company, decision maker and email; the rest are looked up when you open them.'
+              : 'Choose a campaign, then the lead to work on.'}
+            initialCampaignId={activeCampaign?.id}
+            onPick={(c, lead) => { setActiveCampaign(c); setSelectedLead(lead); setSiteUrl(undefined) }}
+            onNewCampaign={() => openCampaign(null)}
+          />
         )}
         {page === 'discover' && (
           <DiscoverPage
@@ -319,6 +323,7 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
           <AuditPage
             lead={selectedLead}
             campaignId={activeCampaign?.id}
+            onChooseLead={() => setSelectedLead(null)}
             onEnriched={enriched => {
               setSelectedLead(enriched)
               setLeads(ls => ls.map(l => (l.id === enriched.id ? enriched : l)))

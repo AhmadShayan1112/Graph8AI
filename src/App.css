@@ -2707,6 +2707,30 @@ body {
 }
 @media (prefers-reduced-motion: reduce) { .dlg-backdrop, .dlg { animation: none; } }
 
+/* ─── Lead picker ─── */
+.picker-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.picker-search { flex: 1 1 280px; min-width: 0; max-width: 480px; }
+.picker-count { font-size: 12.5px; }
+.picker-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid #E7E7E3; border-radius: 12px; }
+.picker-item {
+  width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px; border: 0; border-radius: 8px;
+  background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.picker-item:hover { background: #F6F6F4; }
+.picker-item:focus-visible { outline: 2px solid #2C5DBD; outline-offset: -2px; }
+.picker-score { flex: none; width: 34px; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; text-align: center; }
+.picker-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.picker-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-meta { font-size: 12.5px; color: #6B7080; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-badges { flex: none; display: flex; align-items: center; gap: 6px; }
+.picker-open { flex: none; font-size: 13px; font-weight: 500; color: #2C5DBD; }
+.audit-nav { display: flex; gap: 16px; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .picker-item { flex-wrap: wrap; gap: 8px 12px; }
+  .picker-badges { order: 3; margin-left: 48px; }
+  .picker-open { display: none; }
+}
+
 .sidebar-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 
 @media (max-width: 640px) {
