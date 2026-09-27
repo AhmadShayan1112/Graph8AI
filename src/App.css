@@ -39,29 +39,32 @@ body {
 }
 
 /* ─── Mobile menu ─── */
+.mobile-topbar { display: none; }
 .mobile-menu-toggle {
-  display: none;
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 100;
   width: 40px;
   height: 40px;
+  flex: none;
   border: 1px solid #E7E7E3;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
 }
 .mobile-menu-toggle span {
   width: 18px;
   height: 2px;
   background: #17191E;
   border-radius: 1px;
+  transition: transform 0.2s, opacity 0.2s;
 }
+/* The three bars turn into an X while the menu is open. */
+.mobile-menu-toggle.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.mobile-menu-toggle.open span:nth-child(2) { opacity: 0; }
+.mobile-menu-toggle.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 .mobile-overlay {
   display: none;
   position: fixed;
@@ -489,7 +492,7 @@ body {
   background: #FBFBFA; font: inherit; font-size: 12.5px; color: #3C4049; cursor: pointer; white-space: nowrap;
 }
 .try-chip:hover { border-color: oklch(0.5 0.16 262); color: oklch(0.45 0.16 262); }
-.prompt-max { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.prompt-max { display: flex; align-items: center; gap: 8px; font-size: 12.5px; white-space: nowrap; }
 .prompt-max-input { min-width: 0; width: 72px; height: 30px; }
 
 .active-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -515,8 +518,18 @@ body {
 }
 @media (max-width: 600px) {
   .prompt-row { flex-wrap: wrap; }
-  .prompt-input { flex-basis: calc(100% - 30px); }
+  .prompt-input { flex-basis: calc(100% - 30px); font-size: 16px; }
   .prompt-btn { width: 100%; }
+  .prompt-meta { flex-direction: column; align-items: stretch; }
+  /* Scroll the example prompts sideways instead of stacking them. */
+  .prompt-try { flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 0 12px 2px; scrollbar-width: none; }
+  .prompt-try::-webkit-scrollbar { display: none; }
+  .prompt-max-input { width: 80px; }
+  .filter-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-btn { flex: none; }
+  /* 16px inputs stop iOS from zooming in on focus. */
+  .input, .auth-card .input { font-size: 16px; }
 }
 
 /* ─── KPI Cards ─── */
@@ -628,7 +641,7 @@ body {
 /* ─── Audit: Category Cards ─── */
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 12px;
 }
 .category-card {
@@ -798,7 +811,7 @@ body {
   border-radius: 6px;
   padding: 14px 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: 8px 16px;
 }
 .build-step {
@@ -865,7 +878,7 @@ body {
 .preview-content { padding: 22px; }
 .preview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 20px;
 }
 .preview-hero { display: flex; flex-direction: column; gap: 12px; }
@@ -923,7 +936,7 @@ body {
 /* ─── Delta Cards ─── */
 .delta-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 12px;
 }
 .delta-card {
@@ -959,7 +972,7 @@ body {
 /* ─── Outreach Page ─── */
 .sequence-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: 10px;
 }
 .sequence-card {
@@ -1321,7 +1334,7 @@ body {
 }
 .landing-comparison {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 40px 64px;
   border-top: 1px solid #DADAD5;
   padding-top: 32px;
@@ -1381,7 +1394,7 @@ body {
 .landing-text-link:hover { text-decoration: underline; }
 .landing-how-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
   gap: 0;
   border-top: 1px solid #17191E;
 }
@@ -1415,7 +1428,7 @@ body {
 }
 .landing-audit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
   gap: 48px;
   align-items: start;
 }
@@ -1523,7 +1536,7 @@ body {
 }
 .landing-solutions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 48px;
   align-items: center;
 }
@@ -1724,23 +1737,61 @@ body {
 @media (max-width: 768px) {
   .app-layout { grid-template-columns: 1fr; }
 
-  .mobile-menu-toggle { display: flex; }
-  .mobile-overlay { display: block; }
+  /* Sticky top bar replaces the floating menu button, so nothing overlaps the page or the menu. */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: 56px;
+    padding: 0 16px;
+    background: rgba(246, 246, 244, 0.94);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid #E7E7E3;
+  }
+  .mobile-topbar-brand { padding: 0; }
+  .mobile-topbar-user {
+    margin-left: auto;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    color: #5E636E;
+  }
+  .mobile-overlay { display: block; top: 56px; }
 
   .sidebar-wrapper {
     position: fixed;
-    left: -260px;
-    top: 0;
+    top: 56px;
+    bottom: 0;
+    left: 0;
     z-index: 30;
-    width: 260px;
-    transition: left 0.3s ease;
+    width: min(280px, 85vw);
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.12);
   }
-  .sidebar-wrapper.open { left: 0; }
-  .sidebar-wrapper .sidebar { width: 260px; }
+  .sidebar-wrapper.open { transform: none; }
+  .sidebar-wrapper .sidebar {
+    width: 100%;
+    position: static;
+    height: 100%;
+    overscroll-behavior: contain;
+  }
+  /* The top bar already shows the brand. */
+  .sidebar-wrapper .sidebar > .sidebar-brand { display: none; }
+  .sidebar-item { min-height: 42px; }
 
-  .page-content { padding: 60px 16px 32px; }
+  .page-content { padding: 20px 16px 32px; gap: 18px; }
+  .page-title { font-size: 22px; }
 
-  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-card { padding: 12px; }
+  .kpi-value { font-size: 20px; }
   .leads-header, .lead-row {
     grid-template-columns: minmax(0, 1fr) 56px;
   }
@@ -1758,7 +1809,6 @@ body {
 }
 
 @media (max-width: 480px) {
-  .kpi-grid { grid-template-columns: 1fr; }
   .category-grid { grid-template-columns: 1fr; }
   .page-title { font-size: 22px; }
   .preview-grid { grid-template-columns: 1fr; }

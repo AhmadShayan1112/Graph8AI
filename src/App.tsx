@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import LandingPage from './pages/LandingPage'
 import DiscoverPage, { restoreDiscover } from './pages/DiscoverPage'
@@ -72,14 +72,29 @@ function Workspace({ onLanding }: { onLanding: () => void }) {
 
   const isAdmin = user.role === 'admin'
 
+  // Stop the page behind the open mobile menu from scrolling.
+  useEffect(() => {
+    document.body.style.overflow = mobileMenuOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [mobileMenuOpen])
+
   return (
     <div className="app-layout">
-      <button
-        className="mobile-menu-toggle"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-      >
-        <span /><span /><span />
-      </button>
+      <header className="mobile-topbar">
+        <button
+          className={`mobile-menu-toggle ${mobileMenuOpen ? 'open' : ''}`}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          <span /><span /><span />
+        </button>
+        <div className="sidebar-brand mobile-topbar-brand">
+          <div className="sidebar-logo"><div className="sidebar-logo-dot" /></div>
+          <div className="sidebar-name">Gapwise</div>
+        </div>
+        <span className="mobile-topbar-user">{user.username}</span>
+      </header>
 
       <div className={`sidebar-wrapper ${mobileMenuOpen ? 'open' : ''}`}>
         <Sidebar
