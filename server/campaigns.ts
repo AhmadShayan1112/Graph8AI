@@ -145,7 +145,11 @@ export async function deleteCampaign(auth: AuthInfo, id: string) {
   const c = await findCampaign(auth, id)
   if (!c) return false
   const { campaigns, leads } = await collections()
-  await Promise.all([leads.deleteMany({ campaignId: c._id }), deleteSearchesInCampaign(c._id)])
+  await Promise.all([
+    leads.deleteMany({ campaignId: c._id }),
+    deleteSearchesInCampaign(c._id),
+    analyses().then(col => col.deleteOne({ _id: c._id })),
+  ])
   await campaigns.deleteOne({ _id: c._id })
   return true
 }
@@ -199,5 +203,32 @@ export async function deleteCampaignsFor(ownerId: string) {
   const ids = (await campaigns.find({ ownerId }, { projection: { _id: 1 } }).toArray()).map(c => c._id)
   if (!ids.length) return
   await leads.deleteMany({ campaignId: { $in: ids } })
+  await (await analyses()).deleteMany({ _id: { $in: ids } })
   await campaigns.deleteMany({ _id: { $in: ids } })
+}
+
+// The Graph8 market analysis of a campaign's target, kept so it is only paid for when refreshed.
+export interface MarketAnalysis {
+  filtersUsed: { industryField: string; locations: Location[]; industries: string[] }
+  total: number
+  noWebsite: number
+  withPhone: number
+  breakdowns: Record<string, Array<{ id: string; label: string; count: number }>>
+  computedAt: Date
+  computedBy: string
+}
+
+async function analyses() {
+  return (await getDb()).collection<MarketAnalysis & { _id: ObjectId }>('campaign_analysis')
+}
+
+export async function getMarketAnalysis(campaignId: string) {
+  const doc = await (await analyses()).findOne({ _id: new ObjectId(campaignId) })
+  if (!doc) return null
+  const { _id, ...rest } = doc
+  return rest
+}
+
+export async function saveMarketAnalysis(campaignId: string, a: MarketAnalysis) {
+  await (await analyses()).replaceOne({ _id: new ObjectId(campaignId) }, a, { upsert: true })
 }

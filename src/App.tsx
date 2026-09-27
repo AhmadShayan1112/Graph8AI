@@ -10,6 +10,7 @@ import SitesPage from './pages/SitesPage'
 import UsersPage from './pages/UsersPage'
 import HistoryPage from './pages/HistoryPage'
 import CampaignsPage from './pages/CampaignsPage'
+import AnalysisPage from './pages/AnalysisPage'
 import LoginGate, { useSession } from './components/LoginGate'
 import { EMPTY_FILTERS, logout, saveCampaignLead, type Campaign, type SavedSearch } from './lib/api'
 import type { Lead } from './types/lead'
@@ -42,6 +43,7 @@ function Workspace() {
   // The campaign the user is working in: Discover files searches under it, Audit saves enrichment to it.
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(null)
+  const [analysisCampaignId, setAnalysisCampaignId] = useState<string | null>(null)
 
   // Pages visited, so Back can return to the previous one.
   const history = useRef<string[]>([])
@@ -93,6 +95,11 @@ function Workspace() {
   const handleCampaignLead = (c: Campaign, lead: Lead) => {
     setActiveCampaign(c)
     handleSelectLead(lead)
+  }
+
+  const openAnalysis = (id: string) => {
+    setAnalysisCampaignId(id)
+    setPage('analysis')
   }
 
   const openCampaign = (id: string | null) => {
@@ -203,6 +210,14 @@ function Workspace() {
         )}
         {page === 'pipeline' && <SitesPage />}
         {page === 'history' && <HistoryPage onOpen={s => handleOpenSearch(s)} />}
+        {page === 'analysis' && (
+          <AnalysisPage
+            campaignId={analysisCampaignId}
+            onCampaignId={setAnalysisCampaignId}
+            onOpenCampaign={id => openCampaign(id)}
+            onNewCampaign={() => openCampaign(null)}
+          />
+        )}
         {page === 'campaigns' && (
           <CampaignsPage
             openId={openCampaignId}
@@ -210,7 +225,11 @@ function Workspace() {
             onSearch={handleCampaignSearch}
             onOpenLead={handleCampaignLead}
             onOpenSearch={(c, s) => handleOpenSearch(s, c)}
-            onDeleted={id => { if (activeCampaign?.id === id) setActiveCampaign(null) }}
+            onAnalyse={c => openAnalysis(c.id)}
+            onDeleted={id => {
+              if (activeCampaign?.id === id) setActiveCampaign(null)
+              if (analysisCampaignId === id) setAnalysisCampaignId(null)
+            }}
           />
         )}
         {page === 'settings' && isAdmin && <SettingsPage />}

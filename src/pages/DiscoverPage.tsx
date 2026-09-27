@@ -119,7 +119,7 @@ const DiscoverPage: FC<Props> = ({ onSelectLead, leads, setLeads, campaign, onOp
       <div className="page-content fade-in discover-main">
         <header className="page-header">
           <div className="page-header-text">
-            <div className="page-step">Step 1 · Discover</div>
+            <div className="page-step">Discover</div>
             <h1 className="page-title">Businesses with fixable digital gaps</h1>
           </div>
         </header>

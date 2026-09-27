@@ -13,10 +13,10 @@ const SessionContext = createContext<SessionContextValue>({ user: FULL_ACCESS, r
 export const useSession = () => useContext(SessionContext)
 
 const STEPS = [
-  { n: '01', t: 'Discover', d: 'Find local businesses with website gaps.' },
-  { n: '02', t: 'Audit', d: 'Score speed, SEO, security and conversion.' },
-  { n: '03', t: 'Build', d: 'Claude builds a working MVP site in minutes.' },
-  { n: '04', t: 'Reach out', d: 'Send the live link with a follow-up sequence.' },
+  { t: 'Discover', d: 'Find local businesses with website gaps.' },
+  { t: 'Audit', d: 'Score speed, SEO, security and conversion.' },
+  { t: 'Build', d: 'Claude builds a working MVP site in minutes.' },
+  { t: 'Reach out', d: 'Send the live link with a follow-up sequence.' },
 ]
 
 const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
@@ -97,8 +97,7 @@ const LoginGate: FC<{ children: ReactNode }> = ({ children }) => {
           </h1>
           <ol className="auth-steps">
             {STEPS.map((s, i) => (
-              <li key={s.n} className="auth-step fade-in" style={{ animationDelay: `${0.1 + i * 0.08}s` }}>
-                <span className="auth-step-num mono">{s.n}</span>
+              <li key={s.t} className="auth-step fade-in" style={{ animationDelay: `${0.1 + i * 0.08}s` }}>
                 <div>
                   <div className="auth-step-title">{s.t}</div>
                   <div className="auth-step-desc">{s.d}</div>

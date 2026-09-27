@@ -88,7 +88,7 @@ const BuildPage: FC<Props> = ({ lead, mvpType, onOutreach, onBack, onOpenSetting
       <header className="page-header">
         <div className="page-header-text">
           <button className="back-link" onClick={onBack}>← Back to audit</button>
-          <div className="page-step">Step 3 · Build & deploy</div>
+          <div className="page-step">Build & deploy</div>
           <h1 className="page-title">MVP for {lead.name}</h1>
         </div>
         <div className="page-subtitle" style={{ marginTop: -8 }}>

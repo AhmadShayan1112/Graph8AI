@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb'
 import {
   searchCompaniesByFilters,
   getFilterOptions,
+  getFilteredFilterOptions,
   type SearchFilter,
   searchContactsByDomains,
   autocomplete,
@@ -26,6 +27,7 @@ import { deleteSearch, deleteSearchesFor, getSearch, listSearches, saveSearch } 
 import {
   campaignIdFor, createCampaign, deleteCampaign, deleteCampaignsFor, getCampaign, listCampaigns, parseCampaignInput,
   removeCampaignLead, saveCampaignLeads, updateCampaign, updateCampaignLead,
+  getMarketAnalysis, saveMarketAnalysis, type CampaignTarget, type MarketAnalysis,
 } from './campaigns.js'
 
 export const app = express()
@@ -544,6 +546,93 @@ app.delete('/api/campaigns/:id/leads/:leadId', async (req, res) => {
   } catch (err: any) {
     console.error('[campaigns] lead delete failed:', err.message)
     res.status(503).json({ error: 'Could not remove the lead.' })
+  }
+})
+
+// Campaign analysis: the target market from Graph8 (size, gaps, breakdowns) plus what the campaign has saved.
+// Reading it is free; refreshing the market numbers calls Graph8, so it needs Graph8 access.
+const BREAKDOWN_FIELDS = ['employee_count', 'revenue', 'city', 'industry']
+
+async function computeMarket(target: CampaignTarget, username: string): Promise<MarketAnalysis> {
+  const locations = await Promise.all(target.locations.map(l => (l.field ? { value: l.value, field: l.field } : resolveLocation(l.value))))
+  const body: DiscoverBody = { industries: target.industries, locations }
+  const modes: Array<'industry' | 'description'> = target.industries.length ? ['industry', 'description'] : ['industry']
+  // Same fallback as Discover: rigid industry labels can miss, so also try the description.
+  let best: { mode: 'industry' | 'description'; filters: SearchFilter[]; total: number } | null = null
+  for (const mode of modes) {
+    const filters = buildCompanyFilters(body, mode, 'city')
+    const total = (await searchCompaniesByFilters(filters, 1)).pagination.total
+    if (!best || total > best.total) best = { mode, filters, total }
+    if (best.total >= 5) break
+  }
+  const { mode, filters, total } = best!
+  const count = (extra: SearchFilter) => searchCompaniesByFilters([...filters, extra], 1).then(r => r.pagination.total)
+  const [noWebsite, withPhone, breakdowns] = await Promise.all([
+    count({ field: 'website', operator: 'is_empty', value: [] }),
+    count({ field: 'phone', operator: 'is_not_empty', value: [] }),
+    getFilteredFilterOptions(filters, BREAKDOWN_FIELDS, 10).catch(err => {
+      console.error('[analysis] breakdowns failed:', err.message)
+      return {} as MarketAnalysis['breakdowns']
+    }),
+  ])
+  return {
+    filtersUsed: { industryField: mode, industries: target.industries, locations },
+    total, noWebsite, withPhone, breakdowns,
+    computedAt: new Date(),
+    computedBy: username,
+  }
+}
+
+function leadStats(leads: Array<Record<string, any>>) {
+  const gapCounts = new Map<string, number>()
+  for (const l of leads) for (const g of l.gaps ?? []) gapCounts.set(g, (gapCounts.get(g) ?? 0) + 1)
+  return {
+    saved: leads.length,
+    noWebsite: leads.filter(l => !l.site).length,
+    enriched: leads.filter(l => l.enrichment).length,
+    verifiedEmail: leads.filter(l => l.enrichment?.email?.verified).length,
+    scores: {
+      poor: leads.filter(l => l.score < 40).length,
+      fair: leads.filter(l => l.score >= 40 && l.score < 70).length,
+      good: leads.filter(l => l.score >= 70).length,
+    },
+    topGaps: [...gapCounts].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, count]) => ({ label, count })),
+  }
+}
+
+async function campaignAnalysis(res: Response, id: string) {
+  const found = await getCampaign(getAuth(res), id)
+  if (!found) return null
+  const [market, searches] = await Promise.all([getMarketAnalysis(id), listSearches(getAuth(res), new ObjectId(id))])
+  return { campaign: found.campaign, market, leads: leadStats(found.leads), searchCount: searches.length }
+}
+
+app.get('/api/campaigns/:id/analysis', async (req, res) => {
+  try {
+    const analysis = await campaignAnalysis(res, req.params.id)
+    if (!analysis) { res.status(404).json({ error: 'Campaign not found' }); return }
+    res.json(analysis)
+  } catch (err: any) {
+    console.error('[analysis] read failed:', err.message)
+    res.status(503).json({ error: 'Could not load the analysis.' })
+  }
+})
+
+app.post('/api/campaigns/:id/analysis', needsGraph8, async (req, res) => {
+  try {
+    const found = await getCampaign(getAuth(res), req.params.id)
+    if (!found) { res.status(404).json({ error: 'Campaign not found' }); return }
+    const { target } = found.campaign
+    if (!target.industries.length && !target.locations.length) {
+      res.status(400).json({ error: 'Add target industries or locations to this campaign first. The analysis describes that market.' })
+      return
+    }
+    await saveMarketAnalysis(req.params.id, await computeMarket(target, getAuth(res).username))
+    res.json(await campaignAnalysis(res, req.params.id))
+  } catch (err: any) {
+    console.error('[analysis] refresh failed:', err.message)
+    const missingKey = /not configured/.test(err.message)
+    res.status(missingKey ? 400 : 502).json({ error: missingKey ? err.message : 'Graph8 could not analyse this market right now. Try again shortly.' })
   }
 })
 

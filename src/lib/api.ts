@@ -211,3 +211,32 @@ export const saveCampaignLead = (id: string, lead: Lead) =>
   apiFetch<{ saved: boolean }>(`/campaigns/${id}/leads`, { method: 'PUT', body: JSON.stringify({ lead }) })
 export const removeCampaignLead = (id: string, leadId: string) =>
   apiFetch<{ deleted: boolean }>(`/campaigns/${id}/leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' })
+
+export interface BreakdownOption { id: string; label: string; count: number }
+export interface MarketAnalysis {
+  filtersUsed: { industryField: string; industries: string[]; locations: CampaignTarget['locations'] }
+  total: number
+  noWebsite: number
+  withPhone: number
+  breakdowns: Record<string, BreakdownOption[]>
+  computedAt: string
+  computedBy: string
+}
+export interface CampaignAnalysis {
+  campaign: Campaign
+  market: MarketAnalysis | null
+  searchCount: number
+  leads: {
+    saved: number
+    noWebsite: number
+    enriched: number
+    verifiedEmail: number
+    scores: { poor: number; fair: number; good: number }
+    topGaps: Array<{ label: string; count: number }>
+  }
+}
+
+export const getCampaignAnalysis = (id: string) => apiFetch<CampaignAnalysis>(`/campaigns/${id}/analysis`)
+// Calls Graph8 for fresh market numbers.
+export const refreshCampaignAnalysis = (id: string) =>
+  apiFetch<CampaignAnalysis>(`/campaigns/${id}/analysis`, { method: 'POST' })

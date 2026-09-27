@@ -37,7 +37,7 @@ const OutreachPage: FC<Props> = ({ lead, mvpType, siteUrl, onBack }) => {
       <header className="page-header">
         <div className="page-header-text">
           <button className="back-link" onClick={onBack}>← Back to build</button>
-          <div className="page-step">Step 4 · Outreach</div>
+          <div className="page-step">Outreach</div>
           <h1 className="page-title">Send the working product, not a pitch</h1>
         </div>
         <button

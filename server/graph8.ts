@@ -83,6 +83,23 @@ export async function getFilterOptions(fields: string[]) {
   return out
 }
 
+// Value counts for fields, but only among companies matching `filters` (e.g. company sizes of dentists in Lahore).
+export async function getFilteredFilterOptions(filters: SearchFilter[], fields: string[], limit = 10) {
+  const res = await g8Fetch('/v1/search/filter-options', {
+    method: 'POST',
+    body: JSON.stringify({ resource: 'companies', fields, filters, limit }),
+  })
+  const data = res?.data ?? {}
+  const out: Record<string, Array<{ id: string; label: string; count: number }>> = {}
+  for (const f of fields) {
+    const raw = Array.isArray(data[f]) ? data[f] : Array.isArray(data[f]?.options) ? data[f].options : []
+    out[f] = raw
+      .map((o: any) => ({ id: String(o.id ?? o.value ?? ''), label: String(o.label ?? o.value ?? o.id ?? ''), count: Number(o.count) || 0 }))
+      .filter((o: { label: string }) => o.label)
+  }
+  return out
+}
+
 export type CompanyField = 'industry' | 'city' | 'country' | 'state'
 
 export async function autocomplete(field: CompanyField, value: string, size = 6) {

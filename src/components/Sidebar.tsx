@@ -1,21 +1,41 @@
-import { type FC } from 'react'
+import { type FC, type ReactNode } from 'react'
 import { useSession } from './LoginGate'
 
-interface NavItem {
-  id: string
-  label: string
-  num: string
-  count?: string
+// Line icons drawn on a 24px grid; they inherit the item's text color.
+const ICONS: Record<string, ReactNode> = {
+  analysis: <><path d="M4 20V11" /><path d="M10 20V5" /><path d="M16 20v-6" /><path d="M21 20H3" /></>,
+  campaigns: <><path d="M5 21V4" /><path d="M5 4h12l-2.5 4L17 12H5" /></>,
+  discover: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></>,
+  audit: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3h6v1.5" /><path d="m9 13 2 2 4-4" /></>,
+  build: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></>,
+  outreach: <><path d="M21 3 10 14" /><path d="m21 3-6.5 18-4.5-7-7-4.5L21 3Z" /></>,
+  pipeline: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></>,
+  history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" /><path d="M18 14.8c1.9.7 3.1 2.4 3.5 5.2" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1" /></>,
+  back: <><path d="M19 12H5" /><path d="m11 6-6 6 6 6" /></>,
+  logout: <><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 16l-4-4 4-4" /><path d="M6 12h10" /></>,
 }
 
-const navItems: NavItem[] = [
-  { id: 'campaigns', label: 'Campaigns', num: '01' },
-  { id: 'discover', label: 'Discover', num: '02', count: '' },
-  { id: 'audit', label: 'Audit', num: '03' },
-  { id: 'build', label: 'Build & deploy', num: '04' },
-  { id: 'outreach', label: 'Outreach', num: '05' },
-  { id: 'pipeline', label: 'Pipeline', num: '06' },
-  { id: 'history', label: 'History', num: '07' },
+const Icon: FC<{ name: string }> = ({ name }) => (
+  <svg className="sidebar-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {ICONS[name]}
+  </svg>
+)
+
+const GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }> }> = [
+  { title: 'Plan', items: [{ id: 'analysis', label: 'Analysis' }, { id: 'campaigns', label: 'Campaigns' }] },
+  {
+    title: 'Prospect',
+    items: [
+      { id: 'discover', label: 'Discover' },
+      { id: 'audit', label: 'Audit' },
+      { id: 'build', label: 'Build & deploy' },
+      { id: 'outreach', label: 'Outreach' },
+    ],
+  },
+  { title: 'Records', items: [{ id: 'pipeline', label: 'Pipeline' }, { id: 'history', label: 'History' }] },
 ]
 
 interface SidebarProps {
@@ -28,6 +48,20 @@ interface SidebarProps {
 const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack }) => {
   const { user } = useSession()
   const isAdmin = user.role === 'admin'
+
+  const item = (id: string, label: string, extra?: ReactNode) => (
+    <button
+      key={id}
+      onClick={() => onNavigate(id)}
+      className={`sidebar-item ${active === id ? 'active' : ''}`}
+      aria-current={active === id ? 'page' : undefined}
+    >
+      <Icon name={id} />
+      {label}
+      {extra}
+    </button>
+  )
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -38,44 +72,29 @@ const Sidebar: FC<SidebarProps> = ({ active, onNavigate, leadCount, canGoBack })
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.map(item => (
-          <button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
-            className={`sidebar-item ${active === item.id ? 'active' : ''}`}
-          >
-            <span className="sidebar-item-num">{item.num}</span>
-            {item.label}
-            {item.id === 'discover' && leadCount ? (
-              <span className="sidebar-item-count">{leadCount}</span>
-            ) : null}
-          </button>
+        {GROUPS.map(g => (
+          <div key={g.title} className="sidebar-group">
+            <div className="sidebar-group-title">{g.title}</div>
+            {g.items.map(i => item(i.id, i.label,
+              i.id === 'discover' && leadCount ? <span className="sidebar-item-count">{leadCount}</span> : null))}
+          </div>
         ))}
+        {isAdmin && (
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Admin</div>
+            {item('users', 'Users')}
+            {item('settings', 'Settings')}
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-bottom-links">
-        {isAdmin && (
-          <>
-            <button
-              className={`sidebar-item ${active === 'users' ? 'active' : ''}`}
-              onClick={() => onNavigate('users')}
-            >
-              <span className="sidebar-item-num">◉</span>
-              Users
-            </button>
-            <button
-              className={`sidebar-item ${active === 'settings' ? 'active' : ''}`}
-              onClick={() => onNavigate('settings')}
-            >
-              <span className="sidebar-item-num">⚙</span>
-              Settings
-            </button>
-          </>
-        )}
-        <button className="sidebar-landing-link" onClick={() => onNavigate('back')} disabled={!canGoBack}>
-          ← Back
+        <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('back')} disabled={!canGoBack}>
+          <Icon name="back" />
+          Back
         </button>
-        <button className="sidebar-landing-link" onClick={() => onNavigate('logout')}>
+        <button className="sidebar-item sidebar-item-quiet" onClick={() => onNavigate('logout')}>
+          <Icon name="logout" />
           Sign out
         </button>
       </div>

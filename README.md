@@ -43,6 +43,15 @@ deploy it at `https://your-app/<business-name>`, and send outreach.
 - The campaign page shows the saved leads and past searches; opening a search restores its results without
   calling Graph8 again. Users see their own campaigns; the admin can view everyone's.
 
+## Analysis
+
+- **Analysis** (above Campaigns) sizes a campaign's target market with Graph8: how many businesses match, how
+  many have no website or a phone number, and how the market splits by company size, revenue, city and
+  industry (`POST /search/filter-options`). It also shows how much of that market the campaign's saved leads
+  cover, their health scores and most common gaps.
+- Market numbers are stored in `campaign_analysis` and only recomputed when someone clicks
+  **Refresh from Graph8**, which needs Graph8 access.
+
 ## Local development
 
 ```bash

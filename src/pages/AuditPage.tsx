@@ -77,7 +77,7 @@ const AuditPage: FC<Props> = ({ lead, onBuild, onBack, onEnriched }) => {
       <header className="page-header">
         <div className="page-header-text">
           <button className="back-link" onClick={onBack}>← Back to list</button>
-          <div className="page-step">Step 2 · Audit</div>
+          <div className="page-step">Audit</div>
           <h1 className="page-title">{lead.name}</h1>
           <div className="page-subtitle">
             {lead.type} · {lead.city} · <span className="mono">{lead.site}</span> · {lead.contact}, {lead.role}

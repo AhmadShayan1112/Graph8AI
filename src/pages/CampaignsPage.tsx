@@ -12,6 +12,7 @@ interface Props {
   onSearch: (c: Campaign) => void
   onOpenLead: (c: Campaign, lead: CampaignLead) => void
   onOpenSearch: (c: Campaign, s: SavedSearch) => void
+  onAnalyse: (c: Campaign) => void
   onDeleted: (id: string) => void
 }
 
@@ -178,7 +179,7 @@ const CampaignForm: FC<{
   )
 }
 
-const CampaignView: FC<Props & { id: string }> = ({ id, onOpenId, onSearch, onOpenLead, onOpenSearch, onDeleted }) => {
+const CampaignView: FC<Props & { id: string }> = ({ id, onOpenId, onSearch, onOpenLead, onOpenSearch, onAnalyse, onDeleted }) => {
   const { user } = useSession()
   const [data, setData] = useState<CampaignDetail | null>(null)
   const [error, setError] = useState('')
@@ -260,6 +261,7 @@ const CampaignView: FC<Props & { id: string }> = ({ id, onOpenId, onSearch, onOp
           <button className="btn-accent" onClick={() => onSearch(campaign)} disabled={!canSearch} title={canSearch ? '' : 'Lead search is turned off for your account'}>
             Search in this campaign →
           </button>
+          <button className="btn-secondary" onClick={() => onAnalyse(campaign)}>Analysis</button>
           <button className="btn-secondary" onClick={() => setEditing(e => !e)}>{editing ? 'Close' : 'Edit'}</button>
           <button className="btn-secondary btn-danger" onClick={remove} disabled={busy === 'delete'}>Delete</button>
         </div>
